@@ -8,25 +8,25 @@ class Delight(L.LightningModule):
         super(Delight, self).__init__()
 
         self.bottleneck = torch.nn.Sequential(
-            torch.nn.Conv2d(config.channels, config.nconv1, 3),
+            torch.nn.Conv2d(config["channels"], config["nconv1"], 3),
             torch.nn.ReLU(),
             torch.nn.MaxPool2d(2),
-            torch.nn.Conv2d(config.nconv1, config.nconv2, 3),
+            torch.nn.Conv2d(config["nconv1"], config["nconv2"], 3),
             torch.nn.ReLU(),
             torch.nn.MaxPool2d(2),
-            torch.nn.Conv2d(config.nconv2, config.nconv3, 3),
+            torch.nn.Conv2d(config["nconv2"], config["nconv3"], 3),
             torch.nn.ReLU(),
             torch.nn.Flatten(),
         )
 
         self.regression = torch.nn.Sequential(
             torch.nn.Linear(
-                in_features=4 * 4 * config.nconv3 * config.levels,
-                out_features=config.ndense,
+                in_features=4 * 4 * config["nconv3"] * config["levels"],
+                out_features=config["ndense"],
             ),
             torch.nn.Tanh(),
-            torch.nn.Dropout(p=config.dropout),
-            torch.nn.Linear(in_features=config.ndense, out_features=2),
+            torch.nn.Dropout(p=config["dropout"]),
+            torch.nn.Linear(in_features=config["ndense"], out_features=2),
         )
 
         self.loss = torch.nn.MSELoss()
@@ -45,7 +45,7 @@ class Delight(L.LightningModule):
             "val_loss": [],
         }
 
-        self.save_files = config["save_files"]
+        #self.save_files = config["save_files"]
 
         self.config = config
         self.save_hyperparameters(config)
@@ -120,8 +120,8 @@ class Delight(L.LightningModule):
         self.val_classes.clear()
 
     def predict_step(self, batch):
-        x, ebv, _ = batch
-        return self(x, ebv)
+        x, _ = batch
+        return self(x)
 
     def configure_optimizers(self):
         # lr_lambda = lambda epoch: 0.95 ** epoch
