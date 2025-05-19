@@ -21,9 +21,9 @@ class DelighDataset(Dataset):
     def __getitem__(self, idx):
 
         image = self.imgs[idx]
-        keypoints = self.sn_pos[idx][::-1] + 15
+        keypoints = self.sn_pos[idx][::-1] + 15 # Originalmente es x,y con [::-1] lo invertimos
 
-        if self.augmentation == "data_augmentation":
+        if self.augmentation == "classic":
 
             transform = A.Compose(
                 [
@@ -38,7 +38,7 @@ class DelighDataset(Dataset):
             image = transformed["image"]
             keypoints = transformed["keypoints"]
 
-            return torch.stack(images).unsqueeze(2).float(), torch.tensor(keys).float()
+            return image.unsqueeze(1).float(), torch.tensor(keypoints[0]).float() - 15 #Lo centramos nuevamente
 
         elif self.augmentation == "delight":
 
@@ -67,7 +67,7 @@ class DelighDataset(Dataset):
                 images.append(transformed["image"])
                 keys.append(transformed["keypoints"][0])
 
-            return torch.stack(images).unsqueeze(2).float(), torch.tensor(keys).float()
+            return torch.stack(images).unsqueeze(2).float(), torch.tensor(keys).float() -15
 
         elif self.augmentation == "None":
 
@@ -80,7 +80,7 @@ class DelighDataset(Dataset):
             image = transformed["image"]
             keypoints = transformed["keypoints"]
 
-            return image.unsqueeze(1).float(), torch.tensor(keypoints[0]).float()
+            return image.unsqueeze(1).float(), torch.tensor(keypoints[0]).float() -15
 
 
 def seed_worker(worker_id):
