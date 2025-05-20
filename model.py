@@ -104,7 +104,7 @@ class Delight(L.LightningModule):
         predictions = torch.cat(self.training_predictions, dim=0)
         classes = torch.cat(self.training_classes, dim=0)
 
-        self.curves["train_loss"].append(self.loss(predictions, classes))
+        self.curves["train_loss"].append(self.loss(predictions, classes).item())
 
         self.training_predictions.clear()
         self.training_classes.clear()
@@ -114,7 +114,7 @@ class Delight(L.LightningModule):
         predictions = torch.cat(self.val_predictions, dim=0)
         classes = torch.cat(self.val_classes, dim=0)
 
-        self.curves["val_loss"].append(self.loss(predictions, classes))
+        self.curves["val_loss"].append(self.loss(predictions, classes).item())
 
         self.val_predictions.clear()
         self.val_classes.clear()

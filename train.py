@@ -11,10 +11,10 @@ if __name__ == "__main__":
     parser.add_argument('--dataset_path', type=str, default="/Users/legers/Desktop/Galaxias/tesis/data", help='Dataset path')
     parser.add_argument('--train_augmentation', type=str, default="delight", help='Classic Augmentation or Delight Augmentation')
 
-    parser.add_argument('--lr', type=float, default=1e-4, help='Learning Rate Train')
-    parser.add_argument('--weight_decay', type=float, default=0.0014, help='Weight Decay Train')
+    parser.add_argument('--lr', type=float, default=0.0014, help='Learning Rate Train')
+    parser.add_argument('--weight_decay', type=float, default=0.0, help='Weight Decay Train')
 
-    parser.add_argument('--batch_size', type=int, default=128, help='Training Batch size')
+    parser.add_argument('--batch_size', type=int, default=40, help='Training Batch size')
     parser.add_argument('--num_workers', type=int, default=4, help='Num of Workers of dataloaders')
     parser.add_argument('--epoch', type=int, default=40, help='Training Epochs')
     parser.add_argument('--save_files', type=str, default="resultados", help='File name of the results')
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         "nconv1": 52,
         "nconv2": 57,
         "nconv3": 41,
-        "ndense": 128,
+        "ndense": 685,
         "dropout": 0.06,
         "channels": 1,
         "levels": 5,
