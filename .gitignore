@@ -1,0 +1,21 @@
+# Ignorar archivos temporales de Python
+__pycache__/
+*.pyc
+
+# Ignorar entorno virtual (tanto venv como .venv)
+venv/
+.venv/
+
+# Ignorar archivos de configuración del sistema
+.DS_Store
+
+# Ignorar todos los archivos y subcarpetas en data/
+data/
+
+# Ignorar archivos de datos sueltos
+*.csv
+
+# Ignorar archivos generados por Poetry
+# (lockfile y virtualenv si está dentro del proyecto)
+poetry.lock
+.cache/

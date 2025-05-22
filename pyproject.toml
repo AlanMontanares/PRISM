@@ -7,11 +7,14 @@ authors = ["Alan Contreras Montanares"]
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.9,<3.13"
+python = ">=3.11,<3.13"
 lightning = "*"
 albumentations = "*"
 matplotlib = "*"
-torch = "2.2.2"
+pandas = "*"
+astropy = "*"
+astroquery = "*"
+torch = "2.7.0+cu126"
 numpy = "<2"
 tqdm = "^4.67.1"
 
