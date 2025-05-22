@@ -5,11 +5,13 @@ import threading
 import time
 import os
 import shutil
+import xarray as xr
 
 import astropy.units as u
 from astropy.coordinates import Longitude, Latitude, Angle
 
 from astroquery.hips2fits import hips2fits
+import argparse
 
 def get_galaxy_img(df, id, fov, size):
     
@@ -35,6 +37,27 @@ def get_galaxy_img(df, id, fov, size):
     r = np.flipud(r)
     return r
 
+
+def get_multires_like_delight(df, id, fov, size):
+
+    nlevels = 5
+    data = get_galaxy_img(df, id, fov=fov, size=size)
+
+    delta = int(data.shape[0]/2**nlevels)
+    datah = np.zeros((nlevels, 2 * delta, 2 * delta))
+    
+    # iterate each level
+    for exp in range(nlevels):
+        factor = 2**exp
+        a = xr.DataArray(data, dims=['x', 'y'])
+        c = a.coarsen(x=factor, y=factor).median()
+        center = int(c.shape[0]/2)
+        image = c[center-delta: center+delta, center-delta: center+delta]
+        datah[exp] = image
+
+    del data
+
+    return datah
 
 
 def get_multires(df, id, fov, size):
@@ -67,11 +90,10 @@ def download_batch(data_frame, inicio, final, name_dataset):
     np.save(f'{name_dataset}/{name_dataset}_{final}.npy', np.stack(stack))
 
 
-def download_all(df, name_dataset):
+def download_all(df, name_dataset, batch_size):
 
     os.makedirs(name_dataset, exist_ok=True)
 
-    batch_size = 10
     start = 0
     total = len(df)
 
@@ -107,12 +129,19 @@ def download_all(df, name_dataset):
     shutil.rmtree(name_dataset)
 
 if __name__ == "__main__":
-    
-    df = pd.read_csv("..\data\delight_sersic.csv")[:100]
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataframe_path', type=str, default="simple", help='..\data\df.csv')
+    parser.add_argument('--batch_size', type=int, default=1000, help='Batch size to download imgs')
+
+    args = parser.parse_args()
+
+
+    df = pd.read_csv("..\data\SERSIC\delight_sersic.csv")
 
     alpha = time.time()
 
-    t = threading.Thread(target=download_all, args=[df, "100_examples"])
+    t = threading.Thread(target=download_all, args=[df, "simple_method", args.batch_size])
     t.start()
     t.join()
 
