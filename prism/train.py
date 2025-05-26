@@ -6,7 +6,7 @@ import pandas as pd
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
 
-from optimus_prime.datamodule import *
+from prism.datamodule import *
 from model import *
 
 if __name__ == "__main__":
