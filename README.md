@@ -3,8 +3,8 @@
 ## Instalación
 Requerimientos:
 
-Python (>=3.11, <3.13)
-Poetry: Mire las [instrucciones](https://python-poetry.org/docs/#installing-with-pipx).
+- Python (>=3.11, <3.13)
+- Poetry: Mire las [instrucciones](https://python-poetry.org/docs/#installing-with-pipx).
 
 Para instalar las dependencias necesarias ejecute el comando:
 
