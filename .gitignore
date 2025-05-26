@@ -12,6 +12,9 @@ venv/
 # Ignorar todos los archivos y subcarpetas en data/
 data/
 
+# Ignorar carpeta de resultados
+resultados/
+
 # Ignorar archivos de datos sueltos
 *.csv
 

@@ -12,10 +12,16 @@ from astropy.coordinates import Longitude, Latitude, Angle
 
 from astroquery.hips2fits import hips2fits
 import argparse
+import re
 
 def get_galaxy_img(df, id, fov, size):
     
-    ra,dec = np.float32(df.iloc[id][["host_ra","host_dec"]].values)
+    match = re.search(r'\(([-+]?(?:\d*\.\d+|\d+\.?)),\s*([-+]?(?:\d*\.\d+|\d+\.?))\)', df.iloc[id]["sn_coords"])
+    ra = np.float64(match.group(1))
+    dec = np.float64(match.group(2))
+
+
+    #ra,dec = np.float32(df.iloc[id][["host_ra","host_dec"]].values)
 
     r = hips2fits.query(
         hips="CDS/P/PanSTARRS/DR1/r",
@@ -79,13 +85,14 @@ def download_batch(data_frame, inicio, final, name_dataset):
 
         for retry in range(max_retry):
             try:
-                img = get_multires(data_frame, x, fov = 4320*0.25/3600, size=270)
+                #img = get_multires(data_frame, x, fov = 480*0.25/3600, size=30)
+                img = get_multires_like_delight(data_frame, x, fov = 480*0.25/3600, size=480)
                 stack.append(img)
                 break
 
             except:
                 if retry+1 == max_retry:
-                    stack.append(np.zeros((5,270,270), dtype=np.float32))
+                    stack.append(np.zeros((5,30,30), dtype=np.float32))
 
     np.save(f'{name_dataset}/{name_dataset}_{final}.npy', np.stack(stack))
 
@@ -133,6 +140,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataframe_path', type=str, default="simple", help='..\data\df.csv')
     parser.add_argument('--batch_size', type=int, default=1000, help='Batch size to download imgs')
+    parser.add_argument('--name_dataset', type=str, default="simple_method", help='Name dataset')
 
     args = parser.parse_args()
 
@@ -141,7 +149,7 @@ if __name__ == "__main__":
 
     alpha = time.time()
 
-    t = threading.Thread(target=download_all, args=[df, "simple_method", args.batch_size])
+    t = threading.Thread(target=download_all, args=[df, args.name_dataset, args.batch_size])
     t.start()
     t.join()
 
