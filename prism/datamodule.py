@@ -27,7 +27,7 @@ class DelightDataModule(L.LightningDataModule):
         radius_train = None,
         ab_train = None,
         phi_train = None,
-        batch_size=128,
+        batch_size=40,
         seed=0,
         num_workers=4,
         train_dataset_type="delight_classic",
@@ -48,9 +48,6 @@ class DelightDataModule(L.LightningDataModule):
         self.batch_size = batch_size
         self.seed = seed
 
-        #if train_dataset_type == "delight_autolabeling":
-        #    num_workers = 0
-            
         self.num_workers = num_workers
         self.train_dataset_type = train_dataset_type
 

@@ -18,8 +18,7 @@ def recenter_on_sn(image, sn_pos):
         x_max = min(img.shape[1], x_center + 15)
         y_max = min(img.shape[0], y_center + 15)
 
-        crop = A.Crop(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
-        cropped = crop(image=img)["image"]
+        cropped = img[y_min:y_max, x_min:x_max]
         center_images.append(cropped)
 
     return np.transpose(np.array(center_images), (1, 2, 0))
@@ -213,7 +212,7 @@ class DelighDataset(Dataset):
                                                     sersic_ab=ser_ab,
                                                     sersic_phi=ser_phi)[::-1] # lo dejamos en x,y como lo necesita albumentations
 
-            auto_label_transform = RecenterOnSersicSN(sn_pos=auto_sn_pos) # Para centrar en el auto_sn_pos
+            image = recenter_on_sn(image, auto_sn_pos)
 
             transforms = [
                 A.NoOp(),
@@ -231,7 +230,7 @@ class DelighDataset(Dataset):
 
             for t in transforms:
                 composed = A.Compose(
-                    [auto_label_transform, t, A.pytorch.ToTensorV2()], # Igual a Delight pero ahora con auto-etiquetado
+                    [t, A.pytorch.ToTensorV2()], # Igual a Delight pero ahora con auto-etiquetado
                     keypoint_params=A.KeypointParams(
                         format="xy", remove_invisible=False
                     ),

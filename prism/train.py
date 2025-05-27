@@ -22,7 +22,7 @@ if __name__ == "__main__":
     parser.add_argument('--weight_decay', type=float, default=0.0, help='Weight Decay Train')
 
     parser.add_argument('--batch_size', type=int, default=40, help='Training Batch size')
-    parser.add_argument('--num_workers', type=int, default=4, help='Num of Workers of dataloaders')
+    parser.add_argument('--num_workers', type=int, default=2, help='Num of Workers of dataloaders')
     parser.add_argument('--epoch', type=int, default=40, help='Training Epochs')
     parser.add_argument('--save_files', type=str, default="../resultados/prueba", help='File name of the results')
     parser.add_argument('--seed', type=int, default=0, help='Seed of the experiment')

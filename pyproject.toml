@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "OPTIMUS-PRIME"
+name = "PRISM"
 version = "0.0.0"
 description = "Thesis"
 authors = ["Alan Contreras Montanares"]
@@ -14,7 +14,7 @@ matplotlib = "*"
 pandas = "*"
 astropy = "*"
 astroquery = "*"
-torch = "2.7.0+cu126"
+# torch = "2.7.0+cu126" (instalar a mano)
 numpy = "<2"
 tqdm = "^4.67.1"
 
