@@ -12,6 +12,11 @@ Para instalar las dependencias necesarias ejecute el comando:
 poetry install
 ```
 
+Esto tambien instalará Pytorch pero con la version CPU, es por eso que usted debe instalar [Pytorch](https://pytorch.org/get-started/locally/) segun los requerimientos de su ordenador.
+
+```python
+pip3 install torch --index-url https://download.pytorch.org/whl/cu126```
+```
 ## Entrenamiento
 
 Primero es necesario que cree una carpeta en el directorio llamada `data`, en la cual debera contener un archivo `.npz` con las imagenes a utilizar en multi-resolucion, estas deberan tener esta forma `(N, W, H, L)` (#n imagenes, ancho, alto, niveles). Si tiene las coordenadas celestes de las galaxias y/o supernovas, puede descargar las imagenes asociadas utilizando el archivo `utils/download_multi_res_data.py`.

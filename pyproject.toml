@@ -14,7 +14,7 @@ matplotlib = "*"
 pandas = "*"
 astropy = "*"
 astroquery = "*"
-# torch = "2.7.0+cu126" (instalar a mano)
+#torch = { version = "2.7.0", source = "pytorch-cu126" }
 numpy = "<2"
 tqdm = "^4.67.1"
 
@@ -50,6 +50,14 @@ testpaths = ["tests"]
 log_cli = true
 log_cli_level = "INFO"
 norecursedirs = ".venv"
+
+
+#[[tool.poetry.source]]
+#name = "pytorch-cu126"
+#url = "https://download.pytorch.org/whl/cu126"
+#default = false
+#secondary = true
+
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
