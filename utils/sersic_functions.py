@@ -41,7 +41,7 @@ def sersic_profile(image_shape, x_center, y_center,
 
 def generate_random_pos(sersic_radius, sersic_ab, sersic_phi):
 
-    x_center, y_center = 135, 135
+    x_center, y_center = 134, 134
 
     # Parámetros de Sérsic
     pixel_scale = 0.25
@@ -65,4 +65,4 @@ def generate_random_pos(sersic_radius, sersic_ab, sersic_phi):
 
     x_supernova, y_supernova = np.unravel_index(indice_aleatorio, sersic_img.shape)
 
-    return np.array([x_supernova-135, y_supernova-135])
+    return np.array([x_supernova-134, y_supernova-134])

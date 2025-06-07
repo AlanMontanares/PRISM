@@ -21,7 +21,7 @@ def get_galaxy_img(df, id, fov, size):
     dec = np.float64(match.group(2))
 
 
-    #ra,dec = np.float32(df.iloc[id][["host_ra","host_dec"]].values)
+    #ra,dec = np.float64(df.iloc[id][["host_ra","host_dec"]].values)
 
     r = hips2fits.query(
         hips="CDS/P/PanSTARRS/DR1/r",
