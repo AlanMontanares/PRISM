@@ -5,7 +5,7 @@ import threading
 import time
 import os
 import shutil
-import xarray as xr
+#import xarray as xr
 
 import astropy.units as u
 from astropy.coordinates import Longitude, Latitude, Angle
@@ -16,12 +16,12 @@ import re
 
 def get_galaxy_img(df, id, fov, size):
     
-    match = re.search(r'\(([-+]?(?:\d*\.\d+|\d+\.?)),\s*([-+]?(?:\d*\.\d+|\d+\.?))\)', df.iloc[id]["sn_coords"])
-    ra = np.float64(match.group(1))
-    dec = np.float64(match.group(2))
+    #match = re.search(r'\(([-+]?(?:\d*\.\d+|\d+\.?)),\s*([-+]?(?:\d*\.\d+|\d+\.?))\)', df.iloc[id]["sn_coords"])
+    #ra = np.float64(match.group(1))
+    #dec = np.float64(match.group(2))
 
 
-    #ra,dec = np.float64(df.iloc[id][["host_ra","host_dec"]].values)
+    ra,dec = np.float64(df.iloc[id][["host_ra","host_dec"]].values)
 
     r = hips2fits.query(
         hips="CDS/P/PanSTARRS/DR1/r",
@@ -85,14 +85,14 @@ def download_batch(data_frame, inicio, final, name_dataset):
 
         for retry in range(max_retry):
             try:
-                #img = get_multires(data_frame, x, fov = 480*0.25/3600, size=30)
-                img = get_multires_like_delight(data_frame, x, fov = 480*0.25/3600, size=480)
+                img = get_multires(data_frame, x, fov = 8480*0.25/3600, size=530)  #fov = size* 2**4
+                #img = get_multires_like_delight(data_frame, x, fov = 480*0.25/3600, size=480)
                 stack.append(img)
                 break
 
             except:
                 if retry+1 == max_retry:
-                    stack.append(np.zeros((5,30,30), dtype=np.float32))
+                    stack.append(np.zeros((5,530,530), dtype=np.float32))
 
     np.save(f'{name_dataset}/{name_dataset}_{final}.npy', np.stack(stack))
 
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    df = pd.read_csv("..\data\SERSIC\delight_sersic.csv")
+    df = pd.read_csv("..\data\SERSIC\delight_sersic_train.csv")
 
     alpha = time.time()
 

@@ -63,6 +63,6 @@ def generate_random_pos(sersic_radius, sersic_ab, sersic_phi):
 
     indice_aleatorio = np.random.choice(len(pesos), p=pesos)
 
-    x_supernova, y_supernova = np.unravel_index(indice_aleatorio, sersic_img.shape)
+    x_supernova, y_supernova = np.unravel_index(indice_aleatorio, sersic_img.shape) + np.random.uniform(-0.49999, 0.49999, size= 2) # Hacemos que la posicion este arbitrariamente dentro de ese pixel
 
     return np.array([x_supernova-134, y_supernova-134])
