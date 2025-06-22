@@ -26,11 +26,11 @@ def sersic_profile(image_shape, x_center, y_center,
 
     # Máscara elíptica (dentro de la elipse intensidad > 0)
     ellipse_r = (x_rot / Re_pix)**2 + (y_rot / (Re_pix * q))**2
-    mask = ellipse_r <= 9 # 3**2
-
+    mask = (ellipse_r <= 9)
+    
     # Aplicar máscara: fuera de la elipse intensidad = 0
-    intensity_masked = np.zeros_like(intensity)
-    intensity_masked[mask] = intensity[mask]
+    intensity_masked = np.zeros_like(intensity, dtype=np.float32)
+    intensity_masked[mask] = intensity[mask].astype(np.float32)
 
     #DELIGHT hace estas transformaciones
     intensity_masked = np.rot90(intensity_masked, k=1)
@@ -39,16 +39,16 @@ def sersic_profile(image_shape, x_center, y_center,
     return intensity_masked
 
 
-def generate_random_pos(sersic_radius, sersic_ab, sersic_phi):
+def generate_random_pos(sersic_radius, sersic_ab, sersic_phi, img_size):
 
-    x_center, y_center = 134, 134
+    x_center, y_center = img_size//2 -1, img_size//2 -1
 
     # Parámetros de Sérsic
     pixel_scale = 0.25
 
     # Generar perfil de Sérsic
     sersic_img = sersic_profile(
-        image_shape=(270,270),
+        image_shape=(img_size,img_size),
         x_center=x_center, y_center=y_center,
         Re_arcsec=sersic_radius,
         b_over_a=sersic_ab,
@@ -65,4 +65,4 @@ def generate_random_pos(sersic_radius, sersic_ab, sersic_phi):
 
     x_supernova, y_supernova = np.unravel_index(indice_aleatorio, sersic_img.shape) + np.random.uniform(-0.49999, 0.49999, size= 2) # Hacemos que la posicion este arbitrariamente dentro de ese pixel
 
-    return np.array([x_supernova-134, y_supernova-134])
+    return np.array([x_supernova-x_center, y_supernova-x_center])
