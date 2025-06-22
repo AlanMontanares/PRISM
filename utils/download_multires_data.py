@@ -44,33 +44,33 @@ def get_galaxy_img(df, id, fov, size):
     return r
 
 
-def get_multires_like_delight(df, id, fov, size):
+# def get_multires_like_delight(df, id, fov, size):
 
-    nlevels = 5
-    data = get_galaxy_img(df, id, fov=fov, size=size)
+#     nlevels = 5
+#     data = get_galaxy_img(df, id, fov=fov, size=size)
 
-    delta = int(data.shape[0]/2**nlevels)
-    datah = np.zeros((nlevels, 2 * delta, 2 * delta))
+#     delta = int(data.shape[0]/2**nlevels)
+#     datah = np.zeros((nlevels, 2 * delta, 2 * delta))
     
-    # iterate each level
-    for exp in range(nlevels):
-        factor = 2**exp
-        a = xr.DataArray(data, dims=['x', 'y'])
-        c = a.coarsen(x=factor, y=factor).median()
-        center = int(c.shape[0]/2)
-        image = c[center-delta: center+delta, center-delta: center+delta]
-        datah[exp] = image
+#     # iterate each level
+#     for exp in range(nlevels):
+#         factor = 2**exp
+#         a = xr.DataArray(data, dims=['x', 'y'])
+#         c = a.coarsen(x=factor, y=factor).median()
+#         center = int(c.shape[0]/2)
+#         image = c[center-delta: center+delta, center-delta: center+delta]
+#         datah[exp] = image
 
-    del data
+#     del data
 
-    return datah
+#     return datah
 
 
 def get_multires(df, id, fov, size):
  
     multi = []
     for i in range(5):
-        img = get_galaxy_img(df, id, fov=fov/(2**(4-i)), size=size)
+        img = get_galaxy_img(df, id, fov=fov*(2**i), size=size)
         multi.append(img)
 
     return np.array(multi)
@@ -80,19 +80,20 @@ def download_batch(data_frame, inicio, final, name_dataset):
 
     stack = []
     max_retry = 2
+    size = 630
 
     for x in tqdm(range(inicio,final)):
 
         for retry in range(max_retry):
             try:
-                img = get_multires(data_frame, x, fov = 8480*0.25/3600, size=530)  #fov = size* 2**4
-                #img = get_multires_like_delight(data_frame, x, fov = 480*0.25/3600, size=480)
+                img = get_multires(data_frame, x, fov = size*0.25/3600, size=size)  
+                #img = get_multires_like_delight(data_frame, x, fov = size*0.25/3600, size=size)  
                 stack.append(img)
                 break
 
             except:
                 if retry+1 == max_retry:
-                    stack.append(np.zeros((5,530,530), dtype=np.float32))
+                    stack.append(np.zeros((5,size,size), dtype=np.float32))
 
     np.save(f'{name_dataset}/{name_dataset}_{final}.npy', np.stack(stack))
 
@@ -110,7 +111,6 @@ def download_all(df, name_dataset, batch_size):
     n_procesos = len(arr)-1
     threads = []
 
-    ini = time.time()
 
     for i in range(n_procesos):
         stop = min(arr[i]+batch_size, total)
@@ -121,7 +121,6 @@ def download_all(df, name_dataset, batch_size):
     for thread in threads:
         thread.join()
 
-    print(f"Dataset Finalizado en {time.time()-ini} [s]")
 
     full = []
     for batch in arr[1:n_procesos+1]:
@@ -131,26 +130,26 @@ def download_all(df, name_dataset, batch_size):
     full_final = np.concatenate(full, axis=0)
     full_final = np.transpose(full_final, (0, 2, 3, 1))
 
-    np.save(f'..\data\h2f_ps1_multires_{name_dataset}.npy', full_final.astype(np.float32))
-
-    shutil.rmtree(name_dataset)
+    np.save(f'..\data\SERSIC\X_train_{name_dataset}.npy', full_final.astype(np.float32))
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataframe_path', type=str, default="simple", help='..\data\df.csv')
-    parser.add_argument('--batch_size', type=int, default=1000, help='Batch size to download imgs')
-    parser.add_argument('--name_dataset', type=str, default="simple_method", help='Name dataset')
+    parser.add_argument('--dataframe_path', type=str, default="..\data\SERSIC\df_train.csv", help='df train path')
+    parser.add_argument('--batch_size', type=int, default=100, help='Batch size to download imgs')
+    parser.add_argument('--name_dataset', type=str, default="autolabeling", help='Name dataset')
 
     args = parser.parse_args()
 
 
-    df = pd.read_csv("..\data\SERSIC\delight_sersic_train.csv")
+    df = pd.read_csv(args.dataframe_path)
 
     alpha = time.time()
 
     t = threading.Thread(target=download_all, args=[df, args.name_dataset, args.batch_size])
     t.start()
     t.join()
+
+    shutil.rmtree(args.name_dataset)
 
     print(f"Fin Total: {time.time()-alpha} [s]")
