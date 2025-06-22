@@ -5,7 +5,7 @@ import numpy as np
 import lightning as L
 
 from torch.utils.data import DataLoader
-from utils.custom_datasets import DelightBasic, DelightClassic, DelightAutoLabeling
+from utils.custom_datasets import DelightClassic, DelightAutoLabeling
 
 
 def seed_worker(worker_id):
@@ -51,18 +51,12 @@ class DelightDataModule(L.LightningDataModule):
         self.num_workers = num_workers
         self.train_dataset_type = train_dataset_type
 
-
         self.persistent = num_workers > 0 and torch.cuda.is_available()
 
     def setup(self, stage=None):
-        
-        if self.train_dataset_type == "delight_basic":
-            self.train_dataset = DelightBasic(self.X_train, self.y_train)
 
-
-        elif self.train_dataset_type == "delight_classic":
+        if self.train_dataset_type == "delight_classic":
             self.train_dataset = DelightClassic(self.X_train, self.y_train)
-
 
         elif self.train_dataset_type == "delight_autolabeling":
             self.train_dataset = DelightAutoLabeling(
