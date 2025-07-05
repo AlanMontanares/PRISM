@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--images_path', type=str, default="..\data\SERSIC\dataset_multires_30_simple_method.npy", help='Images path')
-    parser.add_argument('--metadata_path', type=str, default="..\data\SERSIC\delight_sersic.csv", help='Metadata path')
+    parser.add_argument('--metadata_path', type=str, default="..\data\SERSIC\df.csv", help='Metadata path')
     parser.add_argument('--augmented_dataset', action='store_true', help='Usa el dataset aumentado')
     parser.add_argument('--recenter', action='store_true', help='Centra las imagenes de autolabeling en las SN originales')
     parser.add_argument('--train_dataset_type', type=str, default="delight_classic", help='delight_classic or delight_autolabeling')
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     X_val = images[idx_val]
     X_test = images[idx_test]
 
-    del images
+    del images, df
 
     y_train = sn_pos[idx_train]
     y_val = sn_pos[idx_val]
@@ -122,10 +122,17 @@ if __name__ == "__main__":
 
     if args.augmented_dataset:
 
-        data = np.load("..\data\SERSIC\X_train_augmented_x10.npz")
+        print("Using augmented dataset")
+        data = np.load("..\data\SERSIC\X_train_augmented_x30.npz")
         X_train = data["imgs"]
         y_train = data["pos"]
-        
+
+        mask_ceros = (X_train.sum((1,2))==0).any(1)
+
+        X_train = X_train[~mask_ceros]
+        y_train = y_train[~mask_ceros]
+
+        del data
         #mask_ceros =  (X_train.sum((1,2))==0).any(1)
         #X_train = X_train[~mask_ceros]
         #y_train = y_train[~mask_ceros]
@@ -135,7 +142,7 @@ if __name__ == "__main__":
         X_train = np.load("..\data\SERSIC\X_train_autolabeling.npy")
 
         if not args.recenter:
-
+            print("Not using Recenter")
             train_sersic_radius = sersic_radius[idx_train]
             train_sersic_ab = sersic_ab[idx_train]
             train_sersic_phi = sersic_phi[idx_train]

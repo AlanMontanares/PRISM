@@ -81,6 +81,7 @@ class DelightDataModule(L.LightningDataModule):
             num_workers=self.num_workers,
             persistent_workers=self.persistent,
             pin_memory=False,
+            drop_last=True,
             worker_init_fn=seed_worker,
             generator=torch.Generator().manual_seed(self.seed),
         )

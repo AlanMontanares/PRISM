@@ -189,7 +189,7 @@ def download_all(df, name_dataset, batch_size, num_augmentations):
 
     full_pos = np.concatenate(full_pos, axis=0)
 
-    np.savez(f'..\data\h2f_ps1_multires_{name_dataset}.npz', imgs=full_imgs, pos=full_pos)
+    np.savez(f'..\data\SERSIC\X_train_{name_dataset}.npz', imgs=full_imgs, pos=full_pos)
 
     #df["aug_dx"] = full_pos[:,0]
     #df["aug_dy"] = full_pos[:,1]
