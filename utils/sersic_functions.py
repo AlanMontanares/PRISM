@@ -32,11 +32,7 @@ def sersic_profile(image_shape, x_center, y_center,
     intensity_masked = np.zeros_like(intensity, dtype=np.float32)
     intensity_masked[mask] = intensity[mask].astype(np.float32)
 
-    #DELIGHT hace estas transformaciones
-    intensity_masked = np.rot90(intensity_masked, k=1)
-    intensity_masked = np.flipud(intensity_masked)
-
-    return intensity_masked
+    return np.flipud(intensity_masked) # flip eje horizontal
 
 
 def generate_random_pos(sersic_radius, sersic_ab, sersic_phi, img_size):
@@ -52,7 +48,7 @@ def generate_random_pos(sersic_radius, sersic_ab, sersic_phi, img_size):
         x_center=x_center, y_center=y_center,
         Re_arcsec=sersic_radius,
         b_over_a=sersic_ab,
-        theta_deg=sersic_phi,  # sin +90 aquí
+        theta_deg=sersic_phi,  
         pixel_scale=pixel_scale,
         Ie=1.0,
         n=4
@@ -65,4 +61,4 @@ def generate_random_pos(sersic_radius, sersic_ab, sersic_phi, img_size):
 
     x_supernova, y_supernova = np.unravel_index(indice_aleatorio, sersic_img.shape) + np.random.uniform(-0.49999, 0.49999, size= 2) # Hacemos que la posicion este arbitrariamente dentro de ese pixel
 
-    return np.array([x_supernova-x_center, y_supernova-x_center])
+    return np.array([x_supernova-x_center, y_supernova-y_center])
