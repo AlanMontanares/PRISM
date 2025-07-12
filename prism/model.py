@@ -1,6 +1,11 @@
 import torch
 import lightning as L
+import sys
+import os
 
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+
+from utils.inverse_transformation import revert_all_transforms
 
 class Delight(L.LightningModule):
 
@@ -35,17 +40,21 @@ class Delight(L.LightningModule):
         self.weight_decay = config["weight_decay"]
 
         self.training_predictions = []
-        self.training_classes = []
+        self.training_targets = []
 
         self.val_predictions = []
-        self.val_classes = []
+        self.val_targets = []
+
+        self.test_predictions = []
+        self.test_targets = []
+
+        self.test_mean_preds = None
+        self.test_original_targets = None
 
         self.curves = {
             "train_loss": [],
             "val_loss": [],
         }
-
-        #self.save_files = config["save_files"]
 
         self.config = config
         self.save_hyperparameters(config)
@@ -81,9 +90,9 @@ class Delight(L.LightningModule):
         train_loss = self.loss(x_hat, y)
 
         self.training_predictions.append(x_hat.detach().cpu())
-        self.training_classes.append(y.cpu())
+        self.training_targets.append(y.cpu())
 
-        self.log("train_loss", train_loss, prog_bar=True)
+        self.log("train/loss", train_loss, prog_bar=True, on_step=False, on_epoch=True)
         return train_loss
 
     def validation_step(self, batch, batch_idx):
@@ -93,39 +102,62 @@ class Delight(L.LightningModule):
         val_loss = self.loss(x_hat, y)
 
         self.val_predictions.append(x_hat.cpu())
-        self.val_classes.append(y.cpu())
+        self.val_targets.append(y.cpu())
 
-        self.log("val_loss", val_loss, prog_bar=True)
+        self.log("val/loss", val_loss, prog_bar=True, on_step=False, on_epoch=True)
 
         return val_loss
+
+    def test_step(self, batch, batch_idx):
+        x, y = batch
+        x_hat = self.forward(x)
+
+        self.test_predictions.append(x_hat.cpu())
+        self.test_targets.append(y.cpu())
+
+        return
 
     def on_train_epoch_end(self):
 
         predictions = torch.cat(self.training_predictions, dim=0)
-        classes = torch.cat(self.training_classes, dim=0)
+        targets = torch.cat(self.training_targets, dim=0)
 
-        self.curves["train_loss"].append(self.loss(predictions, classes).item())
+        self.curves["train_loss"].append(self.loss(predictions, targets).item())
 
         self.training_predictions.clear()
-        self.training_classes.clear()
+        self.training_targets.clear()
 
     def on_validation_epoch_end(self):
 
         predictions = torch.cat(self.val_predictions, dim=0)
-        classes = torch.cat(self.val_classes, dim=0)
+        targets = torch.cat(self.val_targets, dim=0)
 
-        self.curves["val_loss"].append(self.loss(predictions, classes).item())
+        self.curves["val_loss"].append(self.loss(predictions, targets).item())
 
         self.val_predictions.clear()
-        self.val_classes.clear()
+        self.val_targets.clear()
 
-    def predict_step(self, batch):
-        x, _ = batch
-        return self(x)
+    def on_test_epoch_end(self):
+        
+        preds = torch.cat(self.test_predictions, dim=0)  
+        targets = torch.cat(self.test_targets, dim=0)    
+
+        reverted_preds = revert_all_transforms(preds)    
+        mean_preds = reverted_preds.mean(1) - 14        
+
+        original_targets = targets[:, 0, :]      
+
+        self.test_predictions =  preds
+        self.test_targets = targets
+
+        self.test_mean_preds = mean_preds
+        self.test_original_targets = original_targets
+
+        mse = self.loss(mean_preds, original_targets)
+
+        self.log("test/mse", mse, prog_bar=True)
 
     def configure_optimizers(self):
-        # lr_lambda = lambda epoch: 0.95 ** epoch
-
         optimizer = torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )

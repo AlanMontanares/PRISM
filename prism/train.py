@@ -3,6 +3,9 @@ import sys
 import os
 import time
 import pandas as pd
+import wandb
+from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.callbacks import LearningRateMonitor, RichProgressBar, ModelCheckpoint
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
 
@@ -10,44 +13,46 @@ from prism.datamodule import *
 from model import *
 
 
+def get_balance_mask(df, seed):
 
-def obtain_clean_mask(df):
+    n=12
+    bins_arcsec = np.linspace(0,300*0.25,n)
 
-    Re_pix = df["rSerRadius"] / 0.25  # pasar a pixeles
-    q = df["rSerAb"]                  # b/a
-    theta_rad = np.deg2rad(df["rSerPhi"])  # en radianes
-    r_max = 3  # radio elíptico que define la elipse (equivalente a r^2 = 9)
+    df['bin'] = pd.cut(df['rSerRadius'] * 3, bins=bins_arcsec, right=False)
+    df['bin'] = df['bin'].astype(object)
 
-    # Coordenadas
-    x = df["dx"]
-    y = df["dy"]
+    # Extraer límite izquierdo de cada bin
+    df['bin_left'] = df['bin'].map(lambda x: x.left if pd.notnull(x) else np.nan)
 
-    # Aplicar la misma rotación que en sersic_profile
-    x_rot = x * np.cos(theta_rad) + y * np.sin(theta_rad)
-    y_rot = -x * np.sin(theta_rad) + y * np.cos(theta_rad)
+    # Crear máscara inicial
+    mask = pd.Series(False, index=df.index)
 
-    # Cálculo del radio elíptico al cuadrado
-    ellipse_r = (x_rot / Re_pix)**2 + (y_rot / (Re_pix * q))**2
+    # Bins < 40 → ordenar e interpolar de 10% a 50%
+    bins_lt_40 = df[df['bin_left'] < 40]['bin'].dropna().unique()
+    bins_lt_40 = sorted(bins_lt_40, key=lambda x: x.left)  # ordenarlos por el límite izquierdo
 
-    # Condición: fuera de la elipse si radio elíptico > r^2
-    mask_fuera_elipse = (ellipse_r > r_max**2)
+    n_bins = len(bins_lt_40)
+    #fracs = np.linspace(0.05, 0.3, n_bins)  
+    fracs = np.logspace(np.log10(0.01), np.log10(0.5), n_bins)
 
-    # Condicion: Chi-square > 50
-    mask_chisq = (df["rSerChisq"] > 50)
+    for bin_i, frac in zip(bins_lt_40, fracs):
+        df_bin = df[df['bin'] == bin_i]
+        n_samples = int(len(df_bin) * frac)
+        sampled_idx = df_bin.sample(n=n_samples, replace=False, random_state=seed).index
+        mask.loc[sampled_idx] = True
 
-    mask_final = (mask_fuera_elipse & mask_chisq)
+    # Bins >= 40 → conservar todos
+    mask.loc[df[df['bin_left'] >= 40].index] = True
 
-    return ~mask_final
+    return mask
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--images_path', type=str, default="..\data\SERSIC\dataset_multires_30_simple_method.npy", help='Images path')
-    parser.add_argument('--metadata_path', type=str, default="..\data\SERSIC\df.csv", help='Metadata path')
+    parser.add_argument('--images_path', type=str, default="..\data\SERSIC\dataset_multires_30.npy", help='Images path')
+    parser.add_argument('--metadata_path', type=str, default="..\data\SERSIC\df_coords_fix.csv", help='Metadata path')
     parser.add_argument('--augmented_dataset', action='store_true', help='Usa el dataset aumentado')
-    parser.add_argument('--recenter', action='store_true', help='Centra las imagenes de autolabeling en las SN originales')
-    parser.add_argument('--train_dataset_type', type=str, default="delight_classic", help='delight_classic or delight_autolabeling')
 
     parser.add_argument('--lr', type=float, default=0.0014, help='Learning Rate Train')
     parser.add_argument('--weight_decay', type=float, default=0.0, help='Weight Decay Train')
@@ -56,35 +61,38 @@ if __name__ == "__main__":
     parser.add_argument('--num_workers', type=int, default=2, help='Num of Workers of dataloaders')
     parser.add_argument('--epoch', type=int, default=40, help='Training Epochs')
     parser.add_argument('--save_files', type=str, default="../resultados/prueba", help='File name of the results')
+    parser.add_argument('--run_name', type=str, default="prueba", help='Name of the w&b run')
+
     parser.add_argument('--seed', type=int, default=0, help='Seed of the experiment')
  
     args = parser.parse_args()
 
 
-#-----------REPRODUCIBILIDAD-----------#
+    #-----------REPRODUCIBILIDAD-----------#
     L.seed_everything(args.seed, workers=True)
 
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     torch.set_float32_matmul_precision("medium")
-#-----------REPRODUCIBILIDAD-----------#
+    #-----------REPRODUCIBILIDAD-----------#
 
-#-----------CARPETA CONTENEDORA-----------#
+    #-----W&B-----#
+    wandb.login()
+    #-----W&B-----#
+
+    #-----------CARPETA CONTENEDORA-----------#
     os.makedirs(args.save_files, exist_ok=True)
-#-----------CARPETA CONTENEDORA-----------#
+    #-----------CARPETA CONTENEDORA-----------#
 
-#-----------CARGA DE DATOS-----------#
+    #-----------CARGA DE DATOS-----------#
     print("Cargando Datos\n")
 
     inicio = time.time()
 
-    images = np.load(args.images_path)                                # Imagenes multi-resolucion original
-    df = pd.read_csv(args.metadata_path, dtype={'objID': 'Int64'})    # Dataframe con metadata de Sersic 
+    images = np.load(args.images_path)                               
+    df = pd.read_csv(args.metadata_path, dtype={'objID': 'Int64'})    
 
     sn_pos = df[["dx","dy"]].values.astype(np.float32)
-    sersic_radius = df["rSerRadius"].values.astype(np.float32)
-    sersic_ab = df["rSerAb"].values.astype(np.float32)
-    sersic_phi = df["rSerPhi"].values.astype(np.float32)
 
     oid_train = np.load(f"..\data\SERSIC\id_train.npy",allow_pickle=True) 
     oid_val = np.load(f"..\data\SERSIC\id_validation.npy",allow_pickle=True) 
@@ -104,68 +112,48 @@ if __name__ == "__main__":
     y_val = sn_pos[idx_val]
     y_test = sn_pos[idx_test]
 
-    train_sersic_radius = None
-    train_sersic_ab = None
-    train_sersic_phi = None  
-
-
-    # Limpiamos el conjunto de train 
-    # df_train = df.iloc[idx_train]
-
-    # mask_clean_df = obtain_clean_mask(df_train) # Eliminamos perfiles malos
-    # mask_accepted_radius = (df_train["rSerRadius"].values < 9.8) # Algunas posiciones quedan fuera del tamaño de la imagen (se corregirá)
-    # mask_train = (mask_clean_df & mask_accepted_radius)
-
-    # X_train = X_train[mask_train]
-    # y_train = y_train[mask_train]
-
-
     if args.augmented_dataset:
 
         print("Using augmented dataset")
-        data = np.load("..\data\SERSIC\X_train_augmented_x30.npz")
+        data = np.load("..\data\SERSIC\X_train_augmented_x30_fix.npz")
         X_train = data["imgs"]
         y_train = data["pos"]
 
         mask_ceros = (X_train.sum((1,2))==0).any(1)
+        print(f"Valores nulos: {mask_ceros.sum()}")
 
         X_train = X_train[~mask_ceros]
         y_train = y_train[~mask_ceros]
 
+
+        df_train = pd.read_csv("..\data\SERSIC\df_train.csv", dtype={'objID': 'Int64'})   
+        mask = get_balance_mask(df_train, args.seed)
+
+        idx_tiny = (df_train[mask]).index
+        idx_tiny = np.hstack([range(idx*30,idx*30+30) for idx in idx_tiny])
+
+        mask_balance = np.isin(np.arange(len(X_train)), idx_tiny)
+        print(f"Balance: {mask_balance.sum()/len(mask_balance)}")
+
+        X_train = X_train[mask_balance]
+        y_train = y_train[mask_balance]
+
         del data
-        #mask_ceros =  (X_train.sum((1,2))==0).any(1)
-        #X_train = X_train[~mask_ceros]
-        #y_train = y_train[~mask_ceros]
-
-    if args.train_dataset_type == "delight_autolabeling":
-        
-        X_train = np.load("..\data\SERSIC\X_train_autolabeling.npy")
-
-        if not args.recenter:
-            print("Not using Recenter")
-            train_sersic_radius = sersic_radius[idx_train]
-            train_sersic_ab = sersic_ab[idx_train]
-            train_sersic_phi = sersic_phi[idx_train]
-
-            y_train = None
 
     print(f"Carga de datos finalizada en {time.time()-inicio} [s]\n")
-#-----------CARGA DE DATOS-----------#
+    #-----------CARGA DE DATOS-----------#
 
-#-----------ENTRENAMIENTO-----------#
+    #-----------ENTRENAMIENTO-----------#
     dm = DelightDataModule(X_train=X_train, 
                             X_val=X_val, 
                             X_test=X_test, 
                             y_train=y_train, 
                             y_val=y_val, 
                             y_test=y_test,
-                            radius_train = train_sersic_radius,
-                            ab_train = train_sersic_ab,
-                            phi_train = train_sersic_phi, 
                             batch_size=args.batch_size, 
                             num_workers=args.num_workers, 
-                            seed=args.seed, 
-                            train_dataset_type=args.train_dataset_type)
+                            seed=args.seed)
+
 
     config = {
         "nconv1": 52,
@@ -181,36 +169,61 @@ if __name__ == "__main__":
 
     model = Delight(config)
 
-    checkpoint_callback = L.pytorch.callbacks.ModelCheckpoint(
-        monitor="val_loss", 
+    wandb_logger = WandbLogger(project="PRISM", name =args.run_name, save_dir = args.save_files, entity="fforster-uchile")
+
+    wandb_logger.experiment.config.update({
+        "batch_size": args.batch_size,
+        "num_workers": args.num_workers,
+        "seed": args.seed
+    })
+
+    checkpoint_callback = ModelCheckpoint(
+        monitor="val/loss", 
         dirpath=args.save_files, 
         filename='delight_best_{epoch}', 
         save_top_k=1,
         save_last = False,  
         mode="min")
 
+    lr_callback = LearningRateMonitor(logging_interval="epoch",
+                                      log_momentum=True,
+                                      log_weight_decay=True)
+    
+    progress_bar_callback = RichProgressBar()
+
     trainer = L.Trainer(
         num_sanity_val_steps=0,
-        logger=False,
+        logger=wandb_logger,
         deterministic=True,
         max_epochs=args.epoch,
         accelerator ="gpu",
         devices = "auto",
-        callbacks=[checkpoint_callback])
+        callbacks=[checkpoint_callback, lr_callback, progress_bar_callback])
 
     inicio = time.time()
     trainer.fit(model, dm)
     print(f"Entrenamiento finalizado en {time.time()-inicio} [s]\n")
-#-----------ENTRENAMIENTO-----------#
+    #-----------ENTRENAMIENTO-----------#
 
-#-----------PREDICCIONES-----------#
-    test_preds = torch.cat(trainer.predict(model=model, datamodule =dm, ckpt_path="best"), dim=0)
-    #test_targets = torch.stack([dm.test_dataset()[i][1] for i in range(len(dm.test_dataset()))])
-    test_targets = torch.cat([batch[1] for batch in dm.predict_dataloader()], dim=0)
+    #-----------PREDICCIONES-----------#
+    trainer.test(ckpt_path="best", datamodule=dm)
 
-    np.savez(os.path.join(args.save_files, "test_results.npz"), preds=test_preds.numpy(), targets=test_targets.numpy())
-#-----------PREDICCIONES-----------#
+    test_preds = model.test_predictions
+    test_targets = model.test_targets 
 
-#-----------RESULTADOS-----------#
+    test_mean_preds = model.test_mean_preds
+    test_original_targets = model.test_original_targets
+
+    wandb.finish()
+
+    np.savez(os.path.join(args.save_files, "test_results.npz"), 
+             preds=test_preds.numpy(), 
+             targets=test_targets.numpy(),
+             mean_preds = test_mean_preds.numpy(),
+             original_target = test_original_targets.numpy())
+    #-----------PREDICCIONES-----------#
+
+    #-----------RESULTADOS-----------#
     np.save(os.path.join(args.save_files, "curvas.npy"), model.curves)
-#-----------RESULTADOS-----------#
+    #-----------RESULTADOS-----------#
+

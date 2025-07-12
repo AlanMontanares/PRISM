@@ -48,7 +48,7 @@ class DelightClassic(Dataset):
 
         image = self.imgs[idx]
 
-        keypoints = self.sn_pos[idx][::-1] + 14 # Originalmente es y,x con [::-1] lo invertimos
+        keypoints = self.sn_pos[idx] + 14 
 
         images = []
         keys = []
@@ -95,7 +95,7 @@ class DelightAutoLabeling(Dataset):
         image = self.imgs[idx]
 
         if self.sn_pos is not None:
-            auto_sn_pos = -self.sn_pos[idx][::-1] # Para centrar en el auto_sn_pos (en caso de tenerlos)
+            auto_sn_pos = -self.sn_pos[idx]
 
         else:
         
@@ -106,7 +106,7 @@ class DelightAutoLabeling(Dataset):
             auto_sn_pos = generate_random_pos(sersic_radius=ser_radio,
                                               sersic_ab=ser_ab,
                                               sersic_phi=ser_phi,
-                                              img_size=image.shape[1])[::-1] # lo dejamos en x,y como lo necesita albumentations
+                                              img_size=image.shape[1])
 
         image = recenter_on_sn(image=image, sn_pos=auto_sn_pos, img_size=image.shape[1])
 

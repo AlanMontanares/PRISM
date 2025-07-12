@@ -32,7 +32,7 @@ def sersic_profile(image_shape, x_center, y_center,
     intensity_masked = np.zeros_like(intensity, dtype=np.float32)
     intensity_masked[mask] = intensity[mask].astype(np.float32)
 
-    return np.flipud(intensity_masked) # flip eje horizontal
+    return intensity_masked 
 
 
 def generate_random_pos(sersic_radius, sersic_ab, sersic_phi, img_size):
@@ -61,4 +61,4 @@ def generate_random_pos(sersic_radius, sersic_ab, sersic_phi, img_size):
 
     x_supernova, y_supernova = np.unravel_index(indice_aleatorio, sersic_img.shape) + np.random.uniform(-0.49999, 0.49999, size= 2) # Hacemos que la posicion este arbitrariamente dentro de ese pixel
 
-    return np.array([x_supernova-x_center, y_supernova-y_center])
+    return np.array([y_supernova-y_center, x_supernova-x_center]) 

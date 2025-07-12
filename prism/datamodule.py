@@ -5,7 +5,7 @@ import numpy as np
 import lightning as L
 
 from torch.utils.data import DataLoader
-from utils.custom_datasets import DelightClassic, DelightAutoLabeling
+from utils.custom_datasets import DelightClassic
 
 
 def seed_worker(worker_id):
@@ -24,13 +24,9 @@ class DelightDataModule(L.LightningDataModule):
         y_train,
         y_val,
         y_test,
-        radius_train = None,
-        ab_train = None,
-        phi_train = None,
         batch_size=40,
         seed=0,
         num_workers=4,
-        train_dataset_type="delight_classic",
     ):
         super().__init__()
         self.X_train = X_train
@@ -41,35 +37,16 @@ class DelightDataModule(L.LightningDataModule):
         self.y_val = y_val
         self.y_test = y_test
 
-        self.radius_train = radius_train
-        self.ab_train = ab_train
-        self.phi_train = phi_train
-
         self.batch_size = batch_size
         self.seed = seed
 
         self.num_workers = num_workers
-        self.train_dataset_type = train_dataset_type
 
         self.persistent = num_workers > 0 and torch.cuda.is_available()
 
     def setup(self, stage=None):
 
-        if self.train_dataset_type == "delight_classic":
-            self.train_dataset = DelightClassic(self.X_train, self.y_train)
-
-        elif self.train_dataset_type == "delight_autolabeling":
-            self.train_dataset = DelightAutoLabeling(
-                self.X_train,
-                self.y_train,
-                self.radius_train,
-                self.ab_train,
-                self.phi_train
-            )
-        
-        else:
-            raise ValueError(f"Unknown train_dataset_type: {self.train_dataset_type}")
-
+        self.train_dataset = DelightClassic(self.X_train, self.y_train)
         self.val_dataset = DelightClassic(self.X_val, self.y_val)
         self.test_dataset = DelightClassic(self.X_test, self.y_test)
 
@@ -98,7 +75,7 @@ class DelightDataModule(L.LightningDataModule):
             generator=torch.Generator().manual_seed(self.seed),
         )
 
-    def predict_dataloader(self):
+    def test_dataloader(self):
         return DataLoader(
             self.test_dataset,
             batch_size=self.batch_size,
