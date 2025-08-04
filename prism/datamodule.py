@@ -5,7 +5,7 @@ import numpy as np
 import lightning as L
 
 from torch.utils.data import DataLoader
-from utils.custom_datasets import DelightClassic
+from utils.custom_datasets import DelightClassic, DelightClassicOptimized
 
 
 def seed_worker(worker_id):
@@ -46,9 +46,9 @@ class DelightDataModule(L.LightningDataModule):
 
     def setup(self, stage=None):
 
-        self.train_dataset = DelightClassic(self.X_train, self.y_train)
-        self.val_dataset = DelightClassic(self.X_val, self.y_val)
-        self.test_dataset = DelightClassic(self.X_test, self.y_test)
+        self.train_dataset = DelightClassicOptimized(self.X_train, self.y_train)
+        self.val_dataset = DelightClassicOptimized(self.X_val, self.y_val)
+        self.test_dataset = DelightClassicOptimized(self.X_test, self.y_test)
 
     def train_dataloader(self):
         return DataLoader(
