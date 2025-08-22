@@ -1,29 +1,8 @@
 import torch
-import numpy as np
-
-from torch.utils.data import Dataset
 import albumentations as A
 
-from utils.sersic_functions import generate_random_pos
+from torch.utils.data import Dataset
 
-def recenter_on_sn(image, sn_pos, img_size):
-    center_images = []
-    img_center = img_size//2
-    for i in range(5):
-        img = image[:, :, i]
-        x_center = img_center + round(sn_pos[0] / (2**i)) # Para centrarla en ancho/2 - 1pix  usamos el ancho/2 
-        y_center = img_center + round(sn_pos[1] / (2**i)) 
-        x_min = max(0, x_center - 15)
-        y_min = max(0, y_center - 15)
-        x_max = min(img.shape[1], x_center + 15)
-        y_max = min(img.shape[0], y_center + 15)
-
-        cropped = img[y_min:y_max, x_min:x_max]
-        center_images.append(cropped)
-
-    return np.transpose(np.array(center_images), (1, 2, 0))
-
-    
 class DelightClassic(Dataset):
     def __init__(self, imgs, sn_pos):
 
@@ -46,9 +25,9 @@ class DelightClassic(Dataset):
 
     def __getitem__(self, idx):
 
-        image = self.imgs[idx]
+        image = self.imgs[idx].numpy()
 
-        keypoints = self.sn_pos[idx][::-1] + 14 # Originalmente es y,x con [::-1] lo invertimos
+        keypoints = self.sn_pos[idx].numpy() + 14 
 
         images = []
         keys = []
@@ -67,61 +46,82 @@ class DelightClassic(Dataset):
         return torch.stack(images).unsqueeze(2).float(), torch.tensor(keys).float() - torch.tensor([[14,14],[14,15],[15,15],[15,14],[15,14],[14,14],[14,15],[15,15]])
 
 
-
-class DelightAutoLabeling(Dataset):
-    def __init__(self, imgs, sn_pos, sersic_radius=None, sersic_ab=None, sersic_phi=None):
-
+class DelightClassicOptimized(Dataset):
+    def __init__(self, imgs, sn_pos):
         self.imgs = imgs
         self.sn_pos = sn_pos
-        self.sersic_radius = sersic_radius
-        self.sersic_ab = sersic_ab
-        self.sersic_phi = sersic_phi
-        self.transforms = [
-                            A.NoOp(),
-                            A.Rotate(limit=(90, 90), p=1.0),
-                            A.Rotate(limit=(180, 180), p=1.0),
-                            A.Rotate(limit=(270, 270), p=1.0),
-                            A.HorizontalFlip(p=1.0),
-                            A.Compose([A.HorizontalFlip(p=1.0), A.Rotate(limit=(90, 90), p=1.0)]),
-                            A.Compose([A.HorizontalFlip(p=1.0), A.Rotate(limit=(180, 180), p=1.0)]),
-                            A.Compose([A.HorizontalFlip(p=1.0), A.Rotate(limit=(270, 270), p=1.0)]),
-                        ]
+        self.num_transforms = 8  # Número de transformaciones
+
     def __len__(self):
         return len(self.imgs)
 
+    def _rotate_and_flip_image(self, img, k, flip):
+        # Primero flip si corresponde
+        if flip:
+            img = torch.flip(img, dims=[1])  # horizontal flip
+        # Luego rotar
+        img_rotated = torch.rot90(img.permute(2,0,1), k=k, dims=[1,2]).permute(1,2,0)
+        return img_rotated
+
+    def _rotate_and_flip_keypoints(self, keypoints, k, flip, img_size=30):
+        x, y = keypoints
+
+        # Flip horizontal primero
+        if flip:
+            x = img_size - 1 - x
+
+        # Rotación después
+        if k == 0:  # 0 grados
+            x_new, y_new = x, y
+        elif k == 1:  # 90 grados 
+            x_new = y
+            y_new = img_size - 1 - x
+        elif k == 2:  # 180 grados
+            x_new = img_size - 1 - x
+            y_new = img_size - 1 - y
+        elif k == 3:  # 270 grados
+            x_new = img_size - 1 - y
+            y_new = x
+
+        return torch.tensor([x_new, y_new])
 
     def __getitem__(self, idx):
-
+        # Obtener la imagen y los keypoints originales
         image = self.imgs[idx]
+        keypoints = self.sn_pos[idx] + 14
 
-        if self.sn_pos is not None:
-            auto_sn_pos = -self.sn_pos[idx][::-1] # Para centrar en el auto_sn_pos (en caso de tenerlos)
-
-        else:
+        # Lista para almacenar las imágenes y keypoints transformados
+        images_transformed = []
+        keypoints_transformed = []
         
-            ser_radio = self.sersic_radius[idx]
-            ser_ab = self.sersic_ab[idx]
-            ser_phi = self.sersic_phi[idx] 
+        # Definir las transformaciones: (rotación_k, volteo_horizontal)
+        transformations = [
+            (0, False),  # NoOp
+            (1, False),  # Rotate 90
+            (2, False),  # Rotate 180
+            (3, False),  # Rotate 270
+            (0, True),   # HorizontalFlip
+            (1, True),   # HorizontalFlip + Rotate 90
+            (2, True),   # HorizontalFlip + Rotate 180
+            (3, True),   # HorizontalFlip + Rotate 270
+        ]
 
-            auto_sn_pos = generate_random_pos(sersic_radius=ser_radio,
-                                              sersic_ab=ser_ab,
-                                              sersic_phi=ser_phi,
-                                              img_size=image.shape[1])[::-1] # lo dejamos en x,y como lo necesita albumentations
+        for k, flip in transformations:
+            # Aplicar transformaciones a la imagen
+            transformed_img = self._rotate_and_flip_image(image, k, flip)
+            images_transformed.append(transformed_img)
 
-        image = recenter_on_sn(image=image, sn_pos=auto_sn_pos, img_size=image.shape[1])
+            # Aplicar transformaciones a los keypoints
+            transformed_keypoint = self._rotate_and_flip_keypoints(keypoints, k, flip)
+            keypoints_transformed.append(transformed_keypoint)
 
-        images = []
-        keys = []
+        # Apilar los resultados y ajustar las dimensiones
+        # Las imágenes tienen shape (8, 30, 30, 5) -> se necesita (8, 5, 30, 30) para PyTorch
+        images_stack = torch.stack(images_transformed).permute(0, 3, 1, 2)
+        images_stack = images_stack.float()
+        
+        # Apilar los keypoints
+        keys_stack = torch.stack(keypoints_transformed).float() - torch.tensor([[14,14],[14,15],[15,15],[15,14],[15,14],[14,14],[14,15],[15,15]])
 
-        for t in self.transforms:
-            composed = A.Compose(
-                [t, A.pytorch.ToTensorV2()], # Igual a Delight pero ahora con auto-etiquetado
-                keypoint_params=A.KeypointParams(
-                    format="xy", remove_invisible=False
-                ),
-            )
-            transformed = composed(image=image, keypoints=[auto_sn_pos+14]) # le sumamos el centro porque asi lo requiere albumentations
-            images.append(transformed["image"])
-            keys.append(transformed["keypoints"][0])
-            
-        return torch.stack(images).unsqueeze(2).float(), -torch.tensor(keys).float() + torch.tensor([[14,14],[14,15],[15,15],[15,14],[15,14],[14,14],[14,15],[15,15]])
+        return images_stack.unsqueeze(2), keys_stack
+    
