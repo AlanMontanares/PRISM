@@ -9,43 +9,8 @@ from lightning.pytorch.callbacks import LearningRateMonitor, RichProgressBar, Mo
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
 
-from prism.datamodule import *
+from datamodule import *
 from model import *
-
-
-def get_balance_mask(df, seed):
-
-    n=12
-    bins_arcsec = np.linspace(0,300*0.25,n)
-
-    df['bin'] = pd.cut(df['rSerRadius'] * 3, bins=bins_arcsec, right=False)
-    df['bin'] = df['bin'].astype(object)
-
-    # Extraer límite izquierdo de cada bin
-    df['bin_left'] = df['bin'].map(lambda x: x.left if pd.notnull(x) else np.nan)
-
-    # Crear máscara inicial
-    mask = pd.Series(False, index=df.index)
-
-    # Bins < 40 → ordenar e interpolar de 10% a 50%
-    bins_lt_40 = df[df['bin_left'] < 40]['bin'].dropna().unique()
-    bins_lt_40 = sorted(bins_lt_40, key=lambda x: x.left)  # ordenarlos por el límite izquierdo
-
-    n_bins = len(bins_lt_40)
-    #fracs = np.linspace(0.05, 0.3, n_bins)  
-    fracs = np.logspace(np.log10(0.01), np.log10(0.5), n_bins)
-
-    for bin_i, frac in zip(bins_lt_40, fracs):
-        df_bin = df[df['bin'] == bin_i]
-        n_samples = int(len(df_bin) * frac)
-        sampled_idx = df_bin.sample(n=n_samples, replace=False, random_state=seed).index
-        mask.loc[sampled_idx] = True
-
-    # Bins >= 40 → conservar todos
-    mask.loc[df[df['bin_left'] >= 40].index] = True
-
-    return mask
-
 
 if __name__ == "__main__":
 
@@ -107,31 +72,24 @@ if __name__ == "__main__":
 
     df_train = df[df['oid'].isin(oid_train)]
 
-    delta = 0.10  # 15%
-    diferencia_relativa = np.abs(df_train["rSerRadius"] * 3 - df_train["hostsize"]) / df_train["hostsize"]
-    mask_10 = diferencia_relativa <= delta
-    idx = np.arange(len(df_train))[mask_10]
-
-    X_train = images[idx_train][mask_10]
+    X_train = images[idx_train]
     X_val = images[idx_val]
     X_test = images[idx_test]
 
     print(X_train.shape)
     del images, df
 
-    y_train = sn_pos[idx_train][mask_10]
+    y_train = sn_pos[idx_train]
     y_val = sn_pos[idx_val]
     y_test = sn_pos[idx_test]
 
     if args.augmented_dataset:
         
-        idx_aug = np.concatenate([np.arange(n * 30, n * 30 + 30) for n in idx])
-
         print("Using augmented dataset")
         data = np.load("..\data\SERSIC\X_train_augmented_x30.npz")
         #data = np.load("..\data\SERSIC\X_train_pasquet_augmented_x10.npz")
-        X_train = data["imgs"][idx_aug]
-        y_train = data["pos"][idx_aug]
+        X_train = data["imgs"]
+        y_train = data["pos"]
 
         mask_ceros = (X_train.sum((1,2))==0).any(1)
         print(f"Valores nulos: {mask_ceros.sum()}")
@@ -139,21 +97,7 @@ if __name__ == "__main__":
         X_train = X_train[~mask_ceros]
         y_train = y_train[~mask_ceros]
 
-
-        # df_train = pd.read_csv("..\data\SERSIC\df_train.csv", dtype={'objID': 'Int64'})   
-        # mask = get_balance_mask(df_train, args.seed)
-
-        # idx_tiny = (df_train[mask]).index
-        # idx_tiny = np.hstack([range(idx*30,idx*30+30) for idx in idx_tiny])
-
-        # mask_balance = np.isin(np.arange(len(X_train)), idx_tiny)
-        # print(f"Balance: {mask_balance.sum()/len(mask_balance)}")
-
-        # X_train = X_train[mask_balance]
-        # y_train = y_train[mask_balance]
-
         del data
-
 
     X_train = torch.from_numpy(X_train)
     X_val = torch.from_numpy(X_val)
@@ -261,7 +205,4 @@ if __name__ == "__main__":
              original_target = test_original_targets.numpy())
     #-----------PREDICCIONES-----------#
 
-    #-----------RESULTADOS-----------#
-    np.save(os.path.join(args.save_files, "curvas.npy"), model.curves)
-    #-----------RESULTADOS-----------#
 
