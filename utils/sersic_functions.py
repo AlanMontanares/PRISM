@@ -91,7 +91,7 @@ def generate_random_pos(sersic_radius, sersic_ab, sersic_phi, img_size):
     -------
     np.ndarray
         Vector de longitud 2 con el desplazamiento en píxeles respecto al centro
-        de la galaxia: [dy, dx].
+        de la galaxia: [dx, dy].
 
     Notes
     -----
@@ -119,7 +119,6 @@ def generate_random_pos(sersic_radius, sersic_ab, sersic_phi, img_size):
     pesos = pesos / pesos.sum()
 
     indice_aleatorio = np.random.choice(len(pesos), p=pesos)
+    x_supernova, y_supernova = np.unravel_index(indice_aleatorio, sersic_img.shape) + np.random.uniform(-0.49999, 0.49999, size=2) # Hacemos que la posicion este arbitrariamente dentro de ese pixel
 
-    x_supernova, y_supernova = np.unravel_index(indice_aleatorio, sersic_img.shape) + np.random.uniform(-0.49999, 0.49999, size= 2) # Hacemos que la posicion este arbitrariamente dentro de ese pixel
-
-    return np.array([y_supernova-y_center, x_supernova-x_center]) 
+    return np.array([y_supernova-y_center, x_supernova-x_center])

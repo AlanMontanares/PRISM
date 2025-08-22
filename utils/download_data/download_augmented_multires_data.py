@@ -6,15 +6,47 @@ import time
 import shutil
 
 import argparse
-import sys 
 import os
 
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
-
-from utils.download.h2f_download_functions import get_augmented_multires
+from .h2f_download_functions import get_augmented_multires
 
 
-def download_batch(data_frame, img_size, inicio, final, name_dataset, num_augmentations):
+def map_exponential(x, x_min=10, x_max=70, y_min=5, y_max=500):
+    """
+    Mapea un arreglo de valores a un rango exponencial con límites inferiores y superiores.
+
+    Los valores menores a `x_min` se fijan en `x_min` y los mayores a `x_max` se fijan en `x_max`.
+    Luego se normalizan al rango [0, 1] y se escalan exponencialmente entre `y_min` y `y_max`.
+    El resultado final se devuelve como enteros.
+
+    Parameters
+    ----------
+    x : array_like
+        Arreglo de entrada con valores a transformar.
+    x_min : float, optional
+        Valor mínimo del rango de entrada. Todo valor menor se recorta a este límite.
+    x_max : float, optional
+        Valor máximo del rango de entrada. Todo valor mayor se recorta a este límite.
+    y_min : float, optional
+        Valor mínimo del rango de salida.
+    y_max : float, optional
+        Valor máximo del rango de salida.
+
+    Returns
+    -------
+    numpy.ndarray
+        Arreglo con los valores transformados en enteros.
+    """
+    # Clipping
+    x = np.clip(x, x_min, x_max)
+    # Normalizar a [0, 1]
+    norm = (x - x_min) / (x_max - x_min)
+    # Escalado exponencial
+    val = y_min * (y_max / y_min) ** norm
+    return val.astype(int)
+
+
+def download_batch(data_frame, img_size, inicio, final, name_dataset):
     """
     Descarga un batch de imágenes multiresolución y posiciones de supernovas
     simuladas, y guarda los resultados en un archivo `.npz`.
@@ -35,8 +67,6 @@ def download_batch(data_frame, img_size, inicio, final, name_dataset, num_augmen
         Índice final (excluido) del batch.
     name_dataset : str
         Nombre de la carpeta y prefijo del dataset donde se guardará el archivo.
-    num_augmentations : int
-        Número de posiciones aleatorias de supernova a generar por galaxia.
 
     Notes
     -----
@@ -51,10 +81,13 @@ def download_batch(data_frame, img_size, inicio, final, name_dataset, num_augmen
 
     max_retry = 2
     for x in tqdm(range(inicio,final)):
+        
+        radio_sersic = data_frame.iloc[x]["rSerRadius"]
+        num_augmentations = map_exponential(radio_sersic)
 
         for retry in range(max_retry):
             try:
-                img, pos = get_augmented_multires(data_frame, x, size=img_size, num_augmentations= num_augmentations) 
+                img, pos = get_augmented_multires(data_frame, x, size=img_size, num_augmentations=num_augmentations)
                 img_stack.append(img)
                 pos_stack.append(pos)
                 break
@@ -66,8 +99,7 @@ def download_batch(data_frame, img_size, inicio, final, name_dataset, num_augmen
 
     np.savez(f'{name_dataset}/{name_dataset}_{final}.npz', imgs=np.concatenate(img_stack), pos=np.concatenate(pos_stack))
 
-
-def download_all(df, img_size, name_dataset, batch_size, num_augmentations):
+def download_all(df, img_size, name_dataset, batch_size):
     """
     Descarga todas las imágenes multiresolución y posiciones de supernovas
     de un DataFrame en batches y concatena los resultados en un único 
@@ -83,8 +115,6 @@ def download_all(df, img_size, name_dataset, batch_size, num_augmentations):
         Nombre del dataset. También se usa como nombre de la carpeta de salida.
     batch_size : int
         Número de ejemplos por batch. Cada batch se descarga en un hilo independiente.
-    num_augmentations : int
-        Número de posiciones aleatorias de supernova a generar por galaxia.
 
     Returns
     -------
@@ -102,6 +132,7 @@ def download_all(df, img_size, name_dataset, batch_size, num_augmentations):
     - Se usa `threading` para paralelizar la descarga de batches.
     """
     os.makedirs(name_dataset, exist_ok=True)
+    os.makedirs('data\SERSIC', exist_ok=True)
 
     start = 0
     total = len(df)
@@ -115,7 +146,7 @@ def download_all(df, img_size, name_dataset, batch_size, num_augmentations):
 
     for i in range(n_procesos):
         stop = min(arr[i]+batch_size, total)
-        t = threading.Thread(target=download_batch, args=[df, img_size, arr[i], stop, name_dataset, num_augmentations])
+        t = threading.Thread(target=download_batch, args=[df, img_size, arr[i], stop, name_dataset])
         t.start()
         threads.append(t)
 
@@ -136,7 +167,7 @@ def download_all(df, img_size, name_dataset, batch_size, num_augmentations):
 
     full_pos = np.concatenate(full_pos, axis=0)
 
-    np.savez(f'..\data\SERSIC\X_train_{name_dataset}.npz', imgs=full_imgs, pos=full_pos)
+    np.savez(f'data\SERSIC\X_train_{name_dataset}.npz', imgs=full_imgs, pos=full_pos)
 
 if __name__ == "__main__":
 
@@ -145,7 +176,6 @@ if __name__ == "__main__":
     parser.add_argument('--img_size', type=int, default=30, help='Tamaño de las imagenes a descargar')
     parser.add_argument('--batch_size', type=int, default=100, help='Tamaño del batch para la descargar')
     parser.add_argument('--name_dataset', type=str, default="augmented_dataset", help='Nombre del dataset')
-    parser.add_argument('--num_augmentations', type=int, default=1, help='Numero de augmentations por ejemplo')
 
     args = parser.parse_args()
 
@@ -153,9 +183,7 @@ if __name__ == "__main__":
 
     alpha = time.time()
 
-    t = threading.Thread(target=download_all, args=[df, args.img_size, args.name_dataset, args.batch_size, args.num_augmentations])
-    t.start()
-    t.join()
+    download_all(df, args.img_size, args.name_dataset, args.batch_size)
 
     shutil.rmtree(args.name_dataset)
 
