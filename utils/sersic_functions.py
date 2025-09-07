@@ -61,8 +61,9 @@ def sersic_profile(image_shape, x_center, y_center,
 
     # Máscara elíptica (dentro de la elipse intensidad > 0)
     ellipse_r = (x_rot / Re_pix)**2 + (y_rot / (Re_pix * q))**2
-    mask = (ellipse_r <= 9)
-    
+    #mask = (ellipse_r >= 0.04) & (ellipse_r <= 9) # entre 0.2 y 3 veces el radio
+    mask = (ellipse_r <= 9) 
+
     # Aplicar máscara: fuera de la elipse intensidad = 0
     intensity_masked = np.zeros_like(intensity, dtype=np.float32)
     intensity_masked[mask] = intensity[mask].astype(np.float32)

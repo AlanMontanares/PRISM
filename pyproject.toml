@@ -14,9 +14,15 @@ matplotlib = "*"
 pandas = "*"
 astropy = "*"
 astroquery = "*"
-#torch = { version = "2.7.0", source = "pytorch-cu126" }
+torch = "*"
+timm = "*"
+wandb = "*"
 numpy = "<2"
 tqdm = "^4.67.1"
+rich = "^10.2.2"
+plotly = "^6.3.0"
+kaleido = "^1.0.0"
+joblib = "^1.5.2"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "*"

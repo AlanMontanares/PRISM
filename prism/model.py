@@ -39,23 +39,13 @@ class Delight(L.LightningModule):
 
         self.lr = config["lr"]
         self.weight_decay = config["weight_decay"]
-
-        # self.training_predictions = []
-        # self.training_targets = []
-
-        # self.val_predictions = []
-        # self.val_targets = []
-
+        
         self.test_predictions = []
         self.test_targets = []
 
         self.test_mean_preds = None
         self.test_original_targets = None
 
-        # self.curves = {
-        #     "train_loss": [],
-        #     "val_loss": [],
-        # }
 
         self.config = config
         self.save_hyperparameters(config)
@@ -90,10 +80,7 @@ class Delight(L.LightningModule):
         x_hat = self.forward(x)
         train_loss = self.loss(x_hat, y)
 
-        # self.training_predictions.append(x_hat.detach().cpu())
-        # self.training_targets.append(y.cpu())
-
-        self.log("train/loss", train_loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log("train/loss", train_loss, prog_bar=True, on_step=False, on_epoch=True, sync_dist=True)
         return train_loss
 
     def validation_step(self, batch, batch_idx):
@@ -102,10 +89,7 @@ class Delight(L.LightningModule):
         x_hat = self.forward(x)
         val_loss = self.loss(x_hat, y)
 
-        # self.val_predictions.append(x_hat.cpu())
-        # self.val_targets.append(y.cpu())
-
-        self.log("val/loss", val_loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log("val/loss", val_loss, prog_bar=True, on_step=False, on_epoch=True, sync_dist=True)
 
         return val_loss
 
@@ -117,27 +101,7 @@ class Delight(L.LightningModule):
         self.test_targets.append(y.cpu())
 
         return
-
-    # def on_train_epoch_end(self):
-
-    #     predictions = torch.cat(self.training_predictions, dim=0)
-    #     targets = torch.cat(self.training_targets, dim=0)
-
-    #     self.curves["train_loss"].append(self.loss(predictions, targets).item())
-
-    #     self.training_predictions.clear()
-    #     self.training_targets.clear()
-
-    # def on_validation_epoch_end(self):
-
-    #     predictions = torch.cat(self.val_predictions, dim=0)
-    #     targets = torch.cat(self.val_targets, dim=0)
-
-    #     self.curves["val_loss"].append(self.loss(predictions, targets).item())
-
-    #     self.val_predictions.clear()
-    #     self.val_targets.clear()
-
+    
     def on_test_epoch_end(self):
         
         preds = torch.cat(self.test_predictions, dim=0)  
@@ -156,7 +120,7 @@ class Delight(L.LightningModule):
 
         mse = self.loss(mean_preds, original_targets)
 
-        self.log("test/mse", mse, prog_bar=True)
+        self.log("test/mse", mse, prog_bar=True, sync_dist=True)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
@@ -174,46 +138,19 @@ class Resnet18(L.LightningModule):
 
         self.bottleneck = timm.create_model('resnet18.a1_in1k', pretrained=False, num_classes=0, in_chans=1)
 
-
-        if config['regression']:
-
-            self.regressor = torch.nn.Sequential(
-                torch.nn.Linear(
-                    in_features=512 * config["levels"],
-                    out_features=config["ndense"],
-                ),
-                torch.nn.Tanh(),
-                torch.nn.Dropout(p=config["dropout"]),
-                torch.nn.Linear(in_features=config["ndense"], out_features=2),
-            )
-            self.regressor_loss = torch.nn.MSELoss()
-
-
-        if config['classification']:
-            self.classificator = torch.nn.Sequential(
-                torch.nn.Linear(
-                    in_features=512 * config["levels"],
-                    out_features=config["ndense_cls"],
-                ),
-                torch.nn.ReLU(),
-                torch.nn.Linear(in_features=config["ndense_cls"], out_features=config["ndense_cls"]),
-                torch.nn.ReLU(),
-                torch.nn.Linear(in_features=config["ndense_cls"], out_features=config["out_cls"]),
-            )
-            self.cls_loss = torch.nn.MSELoss()
-
+        self.regressor = torch.nn.Sequential(
+            torch.nn.Linear(
+                in_features=512 * config["levels"],
+                out_features=config["ndense"],
+            ),
+            torch.nn.Tanh(),
+            torch.nn.Dropout(p=config["dropout"]),
+            torch.nn.Linear(in_features=config["ndense"], out_features=2),
+        )
+        self.loss = torch.nn.MSELoss()
         
         self.classification = config['classification']
         self.regression = config['regression']
-
-        # GradNorm
-        self.task_weights = torch.nn.Parameter(torch.ones(2))
-
-        self.alpha = config['alpha']
-
-        # pérdidas iniciales para normalización (se llenan en la 1era epoch)
-        self.register_buffer("initial_losses", torch.zeros(2))
-        self.first_epoch = True
 
         self.lr = config["lr"]
         self.weight_decay = config["weight_decay"]
@@ -248,19 +185,12 @@ class Resnet18(L.LightningModule):
 
         x = self.bottleneck(x)
         x = x.reshape(*new_shape)
+        x = self.regression(x)
 
-        if self.regression and not self.classification:
-            return self.regressor(x)
-        
-        if self.classification and not self.regressor:
-            return self.classificator(x)
-
-        if self.classification and self.regressor:
-            return self.regressor(x), self.classificator(x)
-
+        return x
 
     def training_step(self, batch, batch_idx):
-        x, pos, z = batch  # image, sn_pos, redshift
+        x, y = batch
         x_hat = self.forward(x)
         train_loss = self.loss(x_hat, y)
 

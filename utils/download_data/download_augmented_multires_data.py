@@ -7,43 +7,43 @@ import shutil
 
 import argparse
 import os
+#from joblib import Parallel, delayed
 
 from .h2f_download_functions import get_augmented_multires
+from utils.sersic_functions import sersic_profile
 
 
-def map_exponential(x, x_min=10, x_max=70, y_min=5, y_max=500):
+def augment_dataframe(data_frame, n_jobs=-1):
     """
-    Mapea un arreglo de valores a un rango exponencial con límites inferiores y superiores.
-
-    Los valores menores a `x_min` se fijan en `x_min` y los mayores a `x_max` se fijan en `x_max`.
-    Luego se normalizan al rango [0, 1] y se escalan exponencialmente entre `y_min` y `y_max`.
-    El resultado final se devuelve como enteros.
-
-    Parameters
-    ----------
-    x : array_like
-        Arreglo de entrada con valores a transformar.
-    x_min : float, optional
-        Valor mínimo del rango de entrada. Todo valor menor se recorta a este límite.
-    x_max : float, optional
-        Valor máximo del rango de entrada. Todo valor mayor se recorta a este límite.
-    y_min : float, optional
-        Valor mínimo del rango de salida.
-    y_max : float, optional
-        Valor máximo del rango de salida.
-
-    Returns
-    -------
-    numpy.ndarray
-        Arreglo con los valores transformados en enteros.
+    Duplica filas de un DataFrame según el número de augmentaciones calculado
+    con un perfil de Sérsic.
     """
-    # Clipping
-    x = np.clip(x, x_min, x_max)
-    # Normalizar a [0, 1]
-    norm = (x - x_min) / (x_max - x_min)
-    # Escalado exponencial
-    val = y_min * (y_max / y_min) ** norm
-    return val.astype(int)
+    def compute_num_aug(row):
+        sersic_img = sersic_profile(
+            image_shape=(600, 600),
+            x_center=299, y_center=299,
+            Re_arcsec=row["rSerRadius"],
+            b_over_a=row["rSerAb"],
+            theta_deg=row["rSerPhi"],
+            pixel_scale=0.25,
+            Ie=1.0,
+            n=4
+        )
+        n_pix = np.count_nonzero(sersic_img) * 0.02
+        return int(np.ceil(n_pix))
+
+    nums = Parallel(n_jobs=n_jobs)(
+        delayed(compute_num_aug)(row) for _, row in data_frame.iterrows()
+    )
+    data_frame = data_frame.copy()
+    data_frame["num_augmentations"] = nums
+
+    data_frame_aug = data_frame.loc[
+       data_frame.index.repeat(data_frame["num_augmentations"])
+    ].reset_index(drop=True)
+
+    return data_frame_aug
+
 
 
 def download_batch(data_frame, img_size, inicio, final, name_dataset):
@@ -79,13 +79,11 @@ def download_batch(data_frame, img_size, inicio, final, name_dataset):
     img_stack = []
     pos_stack = []
 
-    max_retry = 2
     for x in tqdm(range(inicio,final)):
         
-        radio_sersic = data_frame.iloc[x]["rSerRadius"]
-        num_augmentations = map_exponential(radio_sersic)
+        num_augmentations = 1
 
-        for retry in range(max_retry):
+        while True:
             try:
                 img, pos = get_augmented_multires(data_frame, x, size=img_size, num_augmentations=num_augmentations)
                 img_stack.append(img)
@@ -93,9 +91,7 @@ def download_batch(data_frame, img_size, inicio, final, name_dataset):
                 break
 
             except:
-                if retry+1 == max_retry:
-                    img_stack.append(np.zeros((num_augmentations, 5, img_size, img_size), dtype=np.float32))
-                    pos_stack.append(np.zeros((num_augmentations, 2), dtype=np.float32))
+                continue  
 
     np.savez(f'{name_dataset}/{name_dataset}_{final}.npz', imgs=np.concatenate(img_stack), pos=np.concatenate(pos_stack))
 
@@ -132,7 +128,7 @@ def download_all(df, img_size, name_dataset, batch_size):
     - Se usa `threading` para paralelizar la descarga de batches.
     """
     os.makedirs(name_dataset, exist_ok=True)
-    os.makedirs('data\SERSIC', exist_ok=True)
+    os.makedirs('data/SERSIC', exist_ok=True)
 
     start = 0
     total = len(df)
@@ -167,12 +163,12 @@ def download_all(df, img_size, name_dataset, batch_size):
 
     full_pos = np.concatenate(full_pos, axis=0)
 
-    np.savez(f'data\SERSIC\X_train_{name_dataset}.npz', imgs=full_imgs, pos=full_pos)
+    np.savez(f'data/SERSIC/X_train_{name_dataset}.npz', imgs=full_imgs, pos=full_pos)
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataframe_path', type=str, default="..\data\SERSIC\df.csv", help='Ruta al dataframe')
+    parser.add_argument('--dataframe_path', type=str, default="../data/SERSIC/df_train_clean.csv", help='Ruta al dataframe')
     parser.add_argument('--img_size', type=int, default=30, help='Tamaño de las imagenes a descargar')
     parser.add_argument('--batch_size', type=int, default=100, help='Tamaño del batch para la descargar')
     parser.add_argument('--name_dataset', type=str, default="augmented_dataset", help='Nombre del dataset')
@@ -180,6 +176,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     df = pd.read_csv(args.dataframe_path)
+    #df = augment_dataframe(df)
 
     alpha = time.time()
 

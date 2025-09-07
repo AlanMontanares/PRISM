@@ -4,6 +4,8 @@ import os
 import time
 import pandas as pd
 import wandb
+import gc
+from pathlib import Path
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import LearningRateMonitor, RichProgressBar, ModelCheckpoint
 
@@ -15,16 +17,17 @@ from model import *
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--images_path', type=str, default="..\data\SERSIC\dataset_multires_30.npy", help='Images path')
-    parser.add_argument('--metadata_path', type=str, default="..\data\SERSIC\df_coords_fix.csv", help='Metadata path')
+    parser.add_argument('--images_path', type=str, default="../data/SERSIC/dataset_multires_30.npy", help='Images path')
+    parser.add_argument('--metadata_path', type=str, default="../data/SERSIC/df_coords_fix.csv", help='Metadata path')
     parser.add_argument('--augmented_dataset', action='store_true', help='Usa el dataset aumentado')
     parser.add_argument('--model_name', type=str, default="delight", help='delight or resnet')
 
     parser.add_argument('--lr', type=float, default=0.0014, help='Learning Rate Train')
-    parser.add_argument('--weight_decay', type=float, default=0.0, help='Weight Decay Train')
+    parser.add_argument('--weight_decay', type=float, default=0.01, help='Weight Decay Train')
 
     parser.add_argument('--batch_size', type=int, default=40, help='Training Batch size')
     parser.add_argument('--accumulate_grad_batches', type=int, default=1, help='Accumulate grad_batches')
+    parser.add_argument('--devices', type=int, default=1, help='N° GPU devices')
 
     parser.add_argument('--num_workers', type=int, default=4, help='Num of Workers of dataloaders')
     parser.add_argument('--epoch', type=int, default=40, help='Training Epochs')
@@ -62,9 +65,10 @@ if __name__ == "__main__":
 
     sn_pos = df[["dx","dy"]].values.astype(np.float32)
 
-    oid_train = np.load(f"..\data\SERSIC\id_train.npy",allow_pickle=True) 
-    oid_val = np.load(f"..\data\SERSIC\id_validation.npy",allow_pickle=True) 
-    oid_test = np.load(f"..\data\SERSIC\id_test.npy",allow_pickle=True) 
+    base_sersic_path = Path("..") / "data" / "SERSIC"
+    oid_train = np.load(base_sersic_path / "id_train.npy", allow_pickle=True)
+    oid_val = np.load(base_sersic_path / "id_validation.npy", allow_pickle=True)
+    oid_test = np.load(base_sersic_path / "id_test.npy", allow_pickle=True)
 
     idx_train = df[df['oid'].isin(oid_train)].index.to_numpy()
     idx_val = df[df['oid'].isin(oid_val)].index.to_numpy()
@@ -76,7 +80,6 @@ if __name__ == "__main__":
     X_val = images[idx_val]
     X_test = images[idx_test]
 
-    print(X_train.shape)
     del images, df
 
     y_train = sn_pos[idx_train]
@@ -86,16 +89,16 @@ if __name__ == "__main__":
     if args.augmented_dataset:
         
         print("Using augmented dataset")
-        data = np.load("..\data\SERSIC\X_train_augmented_x30.npz")
-        #data = np.load("..\data\SERSIC\X_train_pasquet_augmented_x10.npz")
+        data = np.load(base_sersic_path / "X_train_augmented_dataset_1_percent.npz")
         X_train = data["imgs"]
         y_train = data["pos"]
 
-        mask_ceros = (X_train.sum((1,2))==0).any(1)
-        print(f"Valores nulos: {mask_ceros.sum()}")
-
-        X_train = X_train[~mask_ceros]
-        y_train = y_train[~mask_ceros]
+        mask_x = (np.abs(y_train[:,0]) < 255)
+        mask_y = (np.abs(y_train[:,1]) < 255)
+        mask = mask_x & mask_y
+        
+        X_train = X_train[mask]
+        y_train = y_train[mask]
 
         del data
 
@@ -137,7 +140,7 @@ if __name__ == "__main__":
 
         model = Delight(config)
     
-    else:
+    elif args.model_name == 'resnet18':
 
         config = {
             "ndense": 685,
@@ -152,7 +155,7 @@ if __name__ == "__main__":
 
     wandb_logger = WandbLogger(project="PRISM", name =args.run_name, save_dir = args.save_files, entity="fforster-uchile")
 
-    wandb_logger.experiment.config.update({
+    wandb_logger.log_hyperparams({
         "batch_size": args.batch_size,
         "num_workers": args.num_workers,
         "seed": args.seed
@@ -179,7 +182,7 @@ if __name__ == "__main__":
         deterministic=True,
         max_epochs=args.epoch,
         accelerator ="gpu",
-        devices = "auto",
+        devices = args.devices,
         callbacks=[checkpoint_callback, lr_callback, progress_bar_callback])
 
     inicio = time.time()
@@ -188,7 +191,27 @@ if __name__ == "__main__":
     #-----------ENTRENAMIENTO-----------#
 
     #-----------PREDICCIONES-----------#
-    trainer.test(ckpt_path="best", datamodule=dm)
+    del trainer
+    gc.collect()
+    torch.cuda.empty_cache()
+    
+    best_ckpt_path = checkpoint_callback.best_model_path
+
+    trainer_test = L.Trainer(
+        accelerator="gpu",   
+        devices=1,
+        logger=wandb_logger,
+        deterministic=True,
+        num_sanity_val_steps=0
+
+    )
+
+    trainer_test.test(
+        model=model,         
+        ckpt_path=best_ckpt_path,
+        datamodule=dm
+    )
+    #trainer.test(ckpt_path="best", datamodule=dm)
 
     test_preds = model.test_predictions
     test_targets = model.test_targets 

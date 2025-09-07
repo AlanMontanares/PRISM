@@ -78,7 +78,7 @@ class DelightDataModule(L.LightningDataModule):
     def test_dataloader(self):
         return DataLoader(
             self.test_dataset,
-            batch_size=self.batch_size,
+            batch_size=40,
             shuffle=False,
             num_workers=self.num_workers,
             persistent_workers=self.persistent,
