@@ -7,7 +7,7 @@ import shutil
 
 import argparse
 import os
-#from joblib import Parallel, delayed
+from joblib import Parallel, delayed
 
 from .h2f_download_functions import get_augmented_multires
 from utils.sersic_functions import sersic_profile
@@ -29,7 +29,7 @@ def augment_dataframe(data_frame, n_jobs=-1):
             Ie=1.0,
             n=4
         )
-        n_pix = np.count_nonzero(sersic_img) * 0.02
+        n_pix = np.count_nonzero(sersic_img) * 0.001
         return int(np.ceil(n_pix))
 
     nums = Parallel(n_jobs=n_jobs)(
@@ -85,6 +85,7 @@ def download_batch(data_frame, img_size, inicio, final, name_dataset):
 
         while True:
             try:
+                
                 img, pos = get_augmented_multires(data_frame, x, size=img_size, num_augmentations=num_augmentations)
                 img_stack.append(img)
                 pos_stack.append(pos)
@@ -95,7 +96,7 @@ def download_batch(data_frame, img_size, inicio, final, name_dataset):
 
     np.savez(f'{name_dataset}/{name_dataset}_{final}.npz', imgs=np.concatenate(img_stack), pos=np.concatenate(pos_stack))
 
-def download_all(df, img_size, name_dataset, batch_size):
+def download_all(df, img_size, name_dataset, n_procesos):
     """
     Descarga todas las imágenes multiresolución y posiciones de supernovas
     de un DataFrame en batches y concatena los resultados en un único 
@@ -109,8 +110,8 @@ def download_all(df, img_size, name_dataset, batch_size):
         Tamaño en píxeles de las imágenes a generar.
     name_dataset : str
         Nombre del dataset. También se usa como nombre de la carpeta de salida.
-    batch_size : int
-        Número de ejemplos por batch. Cada batch se descarga en un hilo independiente.
+    n_procesos : int
+        Número de hilos a utilizar
 
     Returns
     -------
@@ -133,16 +134,12 @@ def download_all(df, img_size, name_dataset, batch_size):
     start = 0
     total = len(df)
 
-    arr = np.arange(start, total, batch_size)
-    arr = np.append(arr, total)
+    arr = np.linspace(start, total, n_procesos+1, dtype=int)
 
-    n_procesos = len(arr)-1
     threads = []
 
-
     for i in range(n_procesos):
-        stop = min(arr[i]+batch_size, total)
-        t = threading.Thread(target=download_batch, args=[df, img_size, arr[i], stop, name_dataset])
+        t = threading.Thread(target=download_batch, args=[df, img_size, arr[i], arr[i+1], name_dataset])
         t.start()
         threads.append(t)
 
@@ -152,7 +149,7 @@ def download_all(df, img_size, name_dataset, batch_size):
 
     full_imgs = []
     full_pos = []
-    for batch in arr[1:n_procesos+1]:
+    for batch in arr[1:]:
         file = np.load(f'{name_dataset}/{name_dataset}_{batch}.npz')
         full_imgs.append(file["imgs"])
         full_pos.append(file["pos"])
@@ -170,17 +167,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataframe_path', type=str, default="../data/SERSIC/df_train_clean.csv", help='Ruta al dataframe')
     parser.add_argument('--img_size', type=int, default=30, help='Tamaño de las imagenes a descargar')
-    parser.add_argument('--batch_size', type=int, default=100, help='Tamaño del batch para la descargar')
+    parser.add_argument('--n_procesos', type=int, default=16, help='Numero de hilos')
     parser.add_argument('--name_dataset', type=str, default="augmented_dataset", help='Nombre del dataset')
 
     args = parser.parse_args()
 
     df = pd.read_csv(args.dataframe_path)
-    #df = augment_dataframe(df)
+    df = augment_dataframe(df)
 
     alpha = time.time()
 
-    download_all(df, args.img_size, args.name_dataset, args.batch_size)
+    download_all(df, args.img_size, args.name_dataset, args.n_procesos)
 
     shutil.rmtree(args.name_dataset)
 

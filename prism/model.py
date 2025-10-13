@@ -385,7 +385,7 @@ class Delight_multitask(L.LightningModule):
         # logs
         self.log("train/reg_loss", reg_loss, prog_bar=True, on_epoch=True)
         self.log("train/cls_loss", cls_loss, prog_bar=True, on_epoch=True)
-        self.log("train/total_loss", total_loss, prog_bar=True, on_epoch=True)
+        self.log("train/loss", total_loss, prog_bar=True, on_epoch=True)
 
         for i, w in enumerate(self.task_weights.detach().cpu()):
             self.log(f"train/task_weight_{i}", w, prog_bar=True, on_epoch=True)
@@ -401,7 +401,7 @@ class Delight_multitask(L.LightningModule):
 
         self.log("val/reg_loss", reg_loss, prog_bar=True, on_epoch=True)
         self.log("val/cls_loss", cls_loss, prog_bar=True, on_epoch=True)
-        self.log("val/total_loss", total_loss, prog_bar=True, on_epoch=True)
+        self.log("val/loss", total_loss, prog_bar=True, on_epoch=True)
 
         return total_loss
 

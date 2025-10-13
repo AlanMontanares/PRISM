@@ -19,7 +19,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--images_path', type=str, default="../data/SERSIC/dataset_multires_30.npy", help='Images path')
     parser.add_argument('--metadata_path', type=str, default="../data/SERSIC/df_coords_fix.csv", help='Metadata path')
-    parser.add_argument('--augmented_dataset', action='store_true', help='Usa el dataset aumentado')
+    parser.add_argument('--autolabeling_dataset_path',  type=str, default=None)
     parser.add_argument('--model_name', type=str, default="delight", help='delight or resnet')
 
     parser.add_argument('--lr', type=float, default=0.0014, help='Learning Rate Train')
@@ -31,7 +31,6 @@ if __name__ == "__main__":
 
     parser.add_argument('--num_workers', type=int, default=4, help='Num of Workers of dataloaders')
     parser.add_argument('--epoch', type=int, default=40, help='Training Epochs')
-    parser.add_argument('--save_files', type=str, default="../resultados/prueba", help='File name of the results')
     parser.add_argument('--run_name', type=str, default="prueba", help='Name of the w&b run')
 
     parser.add_argument('--seed', type=int, default=0, help='Seed of the experiment')
@@ -52,7 +51,8 @@ if __name__ == "__main__":
     #-----W&B-----#
 
     #-----------CARPETA CONTENEDORA-----------#
-    os.makedirs(args.save_files, exist_ok=True)
+    save_files = f"../resultados/{args.run_name}"
+    os.makedirs(save_files, exist_ok=True)
     #-----------CARPETA CONTENEDORA-----------#
 
     #-----------CARGA DE DATOS-----------#
@@ -86,19 +86,19 @@ if __name__ == "__main__":
     y_val = sn_pos[idx_val]
     y_test = sn_pos[idx_test]
 
-    if args.augmented_dataset:
+    if args.autolabeling_dataset_path:
         
-        print("Using augmented dataset")
-        data = np.load(base_sersic_path / "X_train_augmented_dataset_1_percent.npz")
+        print("Using autolabeling dataset")
+        data = np.load(base_sersic_path / args.autolabeling_dataset_path)
         X_train = data["imgs"]
         y_train = data["pos"]
 
-        mask_x = (np.abs(y_train[:,0]) < 255)
-        mask_y = (np.abs(y_train[:,1]) < 255)
-        mask = mask_x & mask_y
+        # mask_x = (np.abs(y_train[:,0]) < 255)
+        # mask_y = (np.abs(y_train[:,1]) < 255)
+        # mask = mask_x & mask_y
         
-        X_train = X_train[mask]
-        y_train = y_train[mask]
+        # X_train = X_train[mask]
+        # y_train = y_train[mask]
 
         del data
 
@@ -153,7 +153,7 @@ if __name__ == "__main__":
 
         model = Resnet18(config)
 
-    wandb_logger = WandbLogger(project="PRISM", name =args.run_name, save_dir = args.save_files, entity="fforster-uchile")
+    wandb_logger = WandbLogger(project="PRISM", name =args.run_name, save_dir = save_files, entity="fforster-uchile")
 
     wandb_logger.log_hyperparams({
         "batch_size": args.batch_size,
@@ -163,7 +163,7 @@ if __name__ == "__main__":
 
     checkpoint_callback = ModelCheckpoint(
         monitor="val/loss", 
-        dirpath=args.save_files, 
+        dirpath=save_files, 
         filename='delight_best_{epoch}', 
         save_top_k=1,
         save_last = False,  
@@ -221,7 +221,7 @@ if __name__ == "__main__":
 
     wandb.finish()
 
-    np.savez(os.path.join(args.save_files, "test_results.npz"), 
+    np.savez(os.path.join(save_files, "test_results.npz"), 
              preds=test_preds.numpy(), 
              targets=test_targets.numpy(),
              mean_preds = test_mean_preds.numpy(),
