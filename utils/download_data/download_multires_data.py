@@ -1,7 +1,6 @@
 import argparse
 import os
 import shutil
-import sys
 import threading
 import time
 
@@ -9,9 +8,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
 
-from utils.download.h2f_download_functions import get_multires
+from .h2f_download_functions import get_multires
 
 
 def download_batch(data_frame, img_size, inicio, final, name_dataset):
@@ -89,6 +87,7 @@ def download_all(df, img_size, name_dataset, batch_size):
     - Se usa threading para paralelizar la descarga de batches.
     """
     os.makedirs(name_dataset, exist_ok=True)
+    os.makedirs('data\SERSIC', exist_ok=True)
 
     start = 0
     total = len(df)
@@ -118,7 +117,7 @@ def download_all(df, img_size, name_dataset, batch_size):
     full_final = np.concatenate(full, axis=0)
     full_final = np.transpose(full_final, (0, 2, 3, 1))
 
-    np.save(f'..\data\SERSIC\{name_dataset}.npy', full_final.astype(np.float32))
+    np.save(f'data\SERSIC\{name_dataset}.npy', full_final.astype(np.float32))
 
 if __name__ == "__main__":
 
@@ -134,9 +133,7 @@ if __name__ == "__main__":
 
     alpha = time.time()
 
-    t = threading.Thread(target=download_all, args=[df, args.img_size, args.name_dataset, args.batch_size])
-    t.start()
-    t.join()
+    download_all(df, args.img_size, args.name_dataset, args.batch_size)
 
     shutil.rmtree(args.name_dataset)
 

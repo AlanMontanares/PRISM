@@ -61,8 +61,9 @@ def sersic_profile(image_shape, x_center, y_center,
 
     # Máscara elíptica (dentro de la elipse intensidad > 0)
     ellipse_r = (x_rot / Re_pix)**2 + (y_rot / (Re_pix * q))**2
-    mask = (ellipse_r <= 9)
-    
+    #mask = (ellipse_r >= 0.04) & (ellipse_r <= 9) # entre 0.2 y 3 veces el radio
+    mask = (ellipse_r <= 9) 
+
     # Aplicar máscara: fuera de la elipse intensidad = 0
     intensity_masked = np.zeros_like(intensity, dtype=np.float32)
     intensity_masked[mask] = intensity[mask].astype(np.float32)
@@ -91,7 +92,7 @@ def generate_random_pos(sersic_radius, sersic_ab, sersic_phi, img_size):
     -------
     np.ndarray
         Vector de longitud 2 con el desplazamiento en píxeles respecto al centro
-        de la galaxia: [dy, dx].
+        de la galaxia: [dx, dy].
 
     Notes
     -----
@@ -119,7 +120,6 @@ def generate_random_pos(sersic_radius, sersic_ab, sersic_phi, img_size):
     pesos = pesos / pesos.sum()
 
     indice_aleatorio = np.random.choice(len(pesos), p=pesos)
+    x_supernova, y_supernova = np.unravel_index(indice_aleatorio, sersic_img.shape) + np.random.uniform(-0.49999, 0.49999, size=2) # Hacemos que la posicion este arbitrariamente dentro de ese pixel
 
-    x_supernova, y_supernova = np.unravel_index(indice_aleatorio, sersic_img.shape) + np.random.uniform(-0.49999, 0.49999, size= 2) # Hacemos que la posicion este arbitrariamente dentro de ese pixel
-
-    return np.array([y_supernova-y_center, x_supernova-x_center]) 
+    return np.array([y_supernova-y_center, x_supernova-x_center])

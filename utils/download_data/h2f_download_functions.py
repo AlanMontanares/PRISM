@@ -1,12 +1,9 @@
-import sys 
-import os
 
 import numpy as np
 
 from astroquery.hips2fits import hips2fits
 from astropy.wcs import WCS
 
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
 
 from utils.sersic_functions import generate_random_pos
 
@@ -91,6 +88,59 @@ def get_galaxy_img(df, id, level, size):
 
     return r
 
+
+def get_sn_img(sn_ra, sn_dec, level, size):
+
+    """
+    Descarga una imagen astronómica del catálogo Pan-STARRS usando hips2fits 
+    y un sistema de coordenadas WCS definido a partir de un objeto en el DataFrame.
+
+    Parameters
+    ----------
+    sn_ra : float
+        Ra de la supernova en grados.
+    sn_dec : float
+        Dec de la supernova en grados.
+    level : int
+        Nivel resolución de la imagen. A mayor nivel, menor resolución.
+    size : int
+        Tamaño de la imagen en píxeles (ancho y alto).
+
+    Returns
+    -------
+    np.ndarray
+        Imagen en formato numpy array 2D, sin valores NaN (estos se reemplazan por 0).
+    """
+
+    w = WCS(header={
+        'NAXIS': 2,
+        'NAXIS1': size,
+        'NAXIS2': size,
+        'CTYPE1': 'RA---TAN',
+        'CTYPE2': 'DEC--TAN',
+        'CDELT1': -6.94444461259988E-05 * (2 ** level),  
+        'CDELT2': 6.94444461259988E-05 * (2 ** level),  
+        'CRPIX1': size/2,
+        'CRPIX2': size/2,
+        'CUNIT1': 'deg',
+        'CUNIT2': 'deg',
+        'CRVAL1': sn_ra,
+        'CRVAL2': sn_dec,
+    })
+
+    result = hips2fits.query_with_wcs(
+        hips='CDS/P/PanSTARRS/DR1/r',
+        wcs=w,
+        get_query_payload=False,
+        format='fits')
+
+
+    r = result[0].data.byteswap().newbyteorder()
+    r = np.nan_to_num(r, 0)
+
+    return r
+
+
 def get_multires(df, id, size):
     """
     Genera un conjunto de imágenes multiresolución de una galaxia.
@@ -168,7 +218,6 @@ def get_augmented_multires(df, idx, size, num_augmentations):
     host_ra = row["host_ra"]
     host_dec = row["host_dec"]
 
-    # Posición arbitraria
 
     imagenes = []
     posiciones = []
@@ -190,7 +239,7 @@ def get_augmented_multires(df, idx, size, num_augmentations):
         # Obtenemos la imagen en multi-resolucion
         multi = []
         for i in range(5):
-            img = get_galaxy_img(ra_sn, dec_sn, level=i, size=size)
+            img = get_sn_img(ra_sn, dec_sn, level=i, size=size)
             multi.append(img)
 
         imagenes.append(np.array(multi))
