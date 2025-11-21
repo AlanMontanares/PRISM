@@ -12,7 +12,8 @@ from tqdm import tqdm
 from .h2f_download_functions import get_multires
 
 
-def download_batch(data_frame, img_size, inicio, final, name_dataset):
+
+def download_batch(data_frame, img_size, inicio, final, name_dataset, filters):
     """
     Descarga un batch de imágenes multiresolución de galaxias y lo guarda en un directorio.
 
@@ -39,25 +40,26 @@ def download_batch(data_frame, img_size, inicio, final, name_dataset):
     - El archivo se guarda como: `{name_dataset}/{name_dataset}_{final}.npy`.
     - Se permiten hasta 2 reintentos (`max_retry=2`) por imagen.
     """
+
     stack = []
-    max_retry = 2
+    max_retry = 4
 
     for x in tqdm(range(inicio,final)):
 
         for retry in range(max_retry):
             try:
-                img = get_multires(data_frame, x, size=img_size)  
+                img = get_multires(data_frame, x, size=img_size, filters=filters)
                 stack.append(img)
                 break
 
             except:
                 if retry+1 == max_retry:
-                    stack.append(np.zeros((5,img_size,img_size), dtype=np.float32))
-
+                    stack.append(np.zeros((5,len(filters),img_size,img_size), dtype=np.float32))
+    
     np.save(f'{name_dataset}/{name_dataset}_{final}.npy', np.stack(stack))
 
 
-def download_all(df, img_size, name_dataset, batch_size):
+def download_all(df, img_size, name_dataset, n_procesos, filters):
     """
     Descarga todas las imágenes multiresolución de un DataFrame en batches 
     y las combina en un único archivo final.
@@ -70,8 +72,8 @@ def download_all(df, img_size, name_dataset, batch_size):
         Tamaño de las imagenes a descargar
     name_dataset : str
         Nombre del dataset. También se usa como nombre de la carpeta de salida.
-    batch_size : int
-        Número de muestras por batch. Cada batch se descarga en un hilo independiente.
+    n_procesos : int
+        Número de hilos a utilizar
 
     Returns
     -------
@@ -87,21 +89,17 @@ def download_all(df, img_size, name_dataset, batch_size):
     - Se usa threading para paralelizar la descarga de batches.
     """
     os.makedirs(name_dataset, exist_ok=True)
-    os.makedirs('data\SERSIC', exist_ok=True)
+    os.makedirs('data/SERSIC', exist_ok=True)
 
     start = 0
     total = len(df)
 
-    arr = np.arange(start, total, batch_size)
-    arr = np.append(arr, total)
+    arr = np.linspace(start, total, n_procesos+1, dtype=int)
 
-    n_procesos = len(arr)-1
     threads = []
 
-
     for i in range(n_procesos):
-        stop = min(arr[i]+batch_size, total)
-        t = threading.Thread(target=download_batch, args=[df, img_size, arr[i], stop, name_dataset])
+        t = threading.Thread(target=download_batch, args=[df, img_size, arr[i], arr[i+1], name_dataset, filters])
         t.start()
         threads.append(t)
 
@@ -109,23 +107,21 @@ def download_all(df, img_size, name_dataset, batch_size):
         thread.join()
 
 
-    full = []
-    for batch in arr[1:n_procesos+1]:
-        stack = np.load(f'{name_dataset}/{name_dataset}_{batch}.npy')
-        full.append(stack)
-        
-    full_final = np.concatenate(full, axis=0)
-    full_final = np.transpose(full_final, (0, 2, 3, 1))
+    full_imgs = []
+    for batch in arr[1:]:
+        imgs = np.load(f'{name_dataset}/{name_dataset}_{batch}.npy')
+        full_imgs.append(imgs)
 
-    np.save(f'data\SERSIC\{name_dataset}.npy', full_final.astype(np.float32))
+    full_imgs = np.concatenate(full_imgs, axis=0)
+    np.save(f'data/SERSIC/{name_dataset}.npy', full_imgs.astype(np.float32))
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataframe_path', type=str, default="..\data\SERSIC\df.csv", help='Ruta al dataframe')
+    parser.add_argument('--dataframe_path', type=str, default="data/SERSIC/df_coords_fix.csv", help='Ruta al dataframe')
     parser.add_argument('--img_size', type=int, default=30, help='Tamaño de las imagenes a descargar')
-    parser.add_argument('--batch_size', type=int, default=100, help='Tamaño del batch para la descargar')
-    parser.add_argument('--name_dataset', type=str, default="dataset", help='Nombre del dataset')
+    parser.add_argument('--filters', type=str, default='grizy', help='Filtros a descargar')
+    parser.add_argument('--n_procesos', type=int, default=16, help='Numero de hilos')
+    parser.add_argument('--name_dataset', type=str, default="delight_multires_grizy", help='Nombre del dataset')
 
     args = parser.parse_args()
 
@@ -133,7 +129,7 @@ if __name__ == "__main__":
 
     alpha = time.time()
 
-    download_all(df, args.img_size, args.name_dataset, args.batch_size)
+    download_all(df, args.img_size, args.name_dataset, args.n_procesos, args.filters)
 
     shutil.rmtree(args.name_dataset)
 

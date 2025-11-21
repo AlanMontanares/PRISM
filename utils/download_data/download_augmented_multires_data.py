@@ -13,7 +13,7 @@ from .h2f_download_functions import get_augmented_multires
 from utils.sersic_functions import sersic_profile
 
 
-def augment_dataframe(data_frame, n_jobs=-1):
+def augment_dataframe(data_frame, percentaje=0.01, n_jobs=-1):
     """
     Duplica filas de un DataFrame según el número de augmentaciones calculado
     con un perfil de Sérsic.
@@ -29,7 +29,7 @@ def augment_dataframe(data_frame, n_jobs=-1):
             Ie=1.0,
             n=4
         )
-        n_pix = np.count_nonzero(sersic_img) * 0.001
+        n_pix = np.count_nonzero(sersic_img) * percentaje
         return int(np.ceil(n_pix))
 
     nums = Parallel(n_jobs=n_jobs)(
@@ -46,7 +46,7 @@ def augment_dataframe(data_frame, n_jobs=-1):
 
 
 
-def download_batch(data_frame, img_size, inicio, final, name_dataset):
+def download_batch(data_frame, img_size, inicio, final, name_dataset, filters):
     """
     Descarga un batch de imágenes multiresolución y posiciones de supernovas
     simuladas, y guarda los resultados en un archivo `.npz`.
@@ -78,25 +78,29 @@ def download_batch(data_frame, img_size, inicio, final, name_dataset):
     """
     img_stack = []
     pos_stack = []
+    max_retry = 4
 
     for x in tqdm(range(inicio,final)):
         
         num_augmentations = 1
 
-        while True:
+        for retry in range(max_retry):
             try:
                 
-                img, pos = get_augmented_multires(data_frame, x, size=img_size, num_augmentations=num_augmentations)
+                img, pos = get_augmented_multires(data_frame, x, size=img_size, num_augmentations=num_augmentations, filters=filters)
                 img_stack.append(img)
                 pos_stack.append(pos)
                 break
 
             except:
-                continue  
+                if retry+1 == max_retry:
+                    img_stack.append(np.zeros((5,len(filters),img_size,img_size), dtype=np.float32))
+                    pos_stack.append(np.zeros((1,2), dtype=np.float32))
+
 
     np.savez(f'{name_dataset}/{name_dataset}_{final}.npz', imgs=np.concatenate(img_stack), pos=np.concatenate(pos_stack))
 
-def download_all(df, img_size, name_dataset, n_procesos):
+def download_all(df, img_size, name_dataset, n_procesos, filters):
     """
     Descarga todas las imágenes multiresolución y posiciones de supernovas
     de un DataFrame en batches y concatena los resultados en un único 
@@ -139,7 +143,7 @@ def download_all(df, img_size, name_dataset, n_procesos):
     threads = []
 
     for i in range(n_procesos):
-        t = threading.Thread(target=download_batch, args=[df, img_size, arr[i], arr[i+1], name_dataset])
+        t = threading.Thread(target=download_batch, args=[df, img_size, arr[i], arr[i+1], name_dataset, filters])
         t.start()
         threads.append(t)
 
@@ -155,9 +159,6 @@ def download_all(df, img_size, name_dataset, n_procesos):
         full_pos.append(file["pos"])
 
     full_imgs = np.concatenate(full_imgs, axis=0)
-    full_imgs = np.transpose(full_imgs, (0, 2, 3, 1))
-
-
     full_pos = np.concatenate(full_pos, axis=0)
 
     np.savez(f'data/SERSIC/X_train_{name_dataset}.npz', imgs=full_imgs, pos=full_pos)
@@ -165,20 +166,35 @@ def download_all(df, img_size, name_dataset, n_procesos):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataframe_path', type=str, default="../data/SERSIC/df_train_clean.csv", help='Ruta al dataframe')
+    parser.add_argument('--dataframe_path', type=str, default="data/SERSIC/df_train_delight.csv", help='Ruta al dataframe')
     parser.add_argument('--img_size', type=int, default=30, help='Tamaño de las imagenes a descargar')
+    parser.add_argument('--filters', type=str, default='r', help='Filtros a descargar')
+    parser.add_argument('--percentaje', type=float, default=0.01, help='Porciento de augmentations')
     parser.add_argument('--n_procesos', type=int, default=16, help='Numero de hilos')
     parser.add_argument('--name_dataset', type=str, default="augmented_dataset", help='Nombre del dataset')
 
     args = parser.parse_args()
 
     df = pd.read_csv(args.dataframe_path)
-    df = augment_dataframe(df)
+    df2 = df[:50000]
+    df3 = df[50000:]
+
+    #df = augment_dataframe(df, args.percentaje)
 
     alpha = time.time()
+    #download_all(df, args.img_size, args.name_dataset, args.n_procesos, args.filters)
 
-    download_all(df, args.img_size, args.name_dataset, args.n_procesos)
+    configs = [
+        (df2, "autolabeling_pasquet_test_1"),
+        (df3, "autolabeling_pasquet_test_2"),
+    ]
 
-    shutil.rmtree(args.name_dataset)
+    for df, name in configs:
+        try:
+            download_all(df, args.img_size, name, args.n_procesos, args.filters)
+        except Exception as e:
+            print(f"Fallo con {name}: {e}")
+
+    #shutil.rmtree(args.name_dataset)
 
     print(f"Fin Total: {time.time()-alpha} [s]")

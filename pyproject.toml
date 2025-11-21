@@ -1,13 +1,12 @@
-[tool.poetry]
+[project]
 name = "PRISM"
 version = "0.0.0"
 description = "Thesis"
-authors = ["Alan Contreras Montanares"]
-
-package-mode = false
+authors = [{name = "Alan Contreras Montanares"}]
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
 
 [tool.poetry.dependencies]
-python = ">=3.11,<3.13"
 lightning = "*"
 albumentations = "*"
 matplotlib = "*"
@@ -57,14 +56,9 @@ log_cli = true
 log_cli_level = "INFO"
 norecursedirs = ".venv"
 
-
-#[[tool.poetry.source]]
-#name = "pytorch-cu126"
-#url = "https://download.pytorch.org/whl/cu126"
-#default = false
-#secondary = true
-
-
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[project.scripts]
+train = 'prism.train:main'

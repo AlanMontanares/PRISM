@@ -13,20 +13,20 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
 
 from datamodule import *
 from model import *
-from utils.plot_functions import obtain_predicted_ra_dec
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--autolabeling_dataset_path', type=str, default=None)
+    parser.add_argument('--images_path', type=str, default="../data/SERSIC/dataset_multires_30.npy", help='Images path')
+    parser.add_argument('--metadata_path', type=str, default="../data/SERSIC/df_coords_fix.csv", help='Metadata path')
+    parser.add_argument('--autolabeling_dataset_path',  type=str, default=None)
     parser.add_argument('--model_name', type=str, default="delight", help='delight or resnet')
     parser.add_argument('--task', type=str, default='galaxy_hunter', help='galaxy_hunter, redshift_prediction or multitask')
-    parser.add_argument('--channels', type=str, default='r', help='Image filters to use')
+    parser.add_argument('--filters', type=str, default='r', help='Image filters to use')
 
     parser.add_argument('--lr', type=float, default=0.0014, help='Learning Rate Train')
     parser.add_argument('--weight_decay', type=float, default=0.01, help='Weight Decay Train')
 
-    parser.add_argument('--use_sampler', type=str, default=None)
     parser.add_argument('--batch_size', type=int, default=40, help='Training Batch size')
     parser.add_argument('--accumulate_grad_batches', type=int, default=1, help='Accumulate grad_batches')
     parser.add_argument('--devices', type=int, default=1, help='N° GPU devices')
@@ -62,90 +62,48 @@ if __name__ == "__main__":
 
     inicio = time.time()
 
+    images = np.load(args.images_path)                               
+    df = pd.read_csv(args.metadata_path, dtype={'objID': 'Int64'})    
+
+    sn_pos = df[["dx","dy"]].values.astype(np.float32)
+
     base_sersic_path = Path("..") / "data" / "SERSIC"
+    oid_train = np.load(base_sersic_path / "id_train.npy", allow_pickle=True)
+    oid_val = np.load(base_sersic_path / "id_validation.npy", allow_pickle=True)
+    oid_test = np.load(base_sersic_path / "id_test.npy", allow_pickle=True)
 
-    if args.task == "galaxy_hunter":
+    idx_train = df[df['oid'].isin(oid_train)].index.to_numpy()
+    idx_val = df[df['oid'].isin(oid_val)].index.to_numpy()
+    idx_test = df[df['oid'].isin(oid_test)].index.to_numpy()
 
-        if args.autolabeling_dataset_path:
-            data_train_delight = np.load(base_sersic_path / args.autolabeling_dataset_path)
-            X_train = data_train_delight["imgs"]
-            pos_train = data_train_delight["pos"]
+    df_train = df[df['oid'].isin(oid_train)]
 
-            mask = (X_train.sum((3,4))==0).any((1,2)) #Casos con bandas == 0
-            X_train = X_train[~mask]
-            pos_train = pos_train[~mask]
+    X_train = images[idx_train]
+    X_val = images[idx_val]
+    X_test = images[idx_test]
+
+    del images, df
+
+    y_train = sn_pos[idx_train]
+    y_val = sn_pos[idx_val]
+    y_test = sn_pos[idx_test]
+
+    if args.autolabeling_dataset_path:
         
-        else:
-            data_train_delight = np.load(base_sersic_path / "train_delight.npz")
-            X_train = data_train_delight["imgs"]
-            pos_train = data_train_delight["pos"]
+        print("Using autolabeling dataset")
+        data = np.load(base_sersic_path / args.autolabeling_dataset_path)
+        X_train = data["imgs"]
+        y_train = data["pos"]
 
-        data_val_delight = np.load(base_sersic_path / "val_delight.npz")
-        X_val = data_val_delight["imgs"]
-        pos_val = data_val_delight["pos"]
-        
-        data_test_delight = np.load(base_sersic_path / "test_delight.npz")
-        X_test = data_test_delight["imgs"]
-        pos_test = data_test_delight["pos"]
+        del data
 
-        del data_train_delight, data_val_delight, data_test_delight
+    X_train = torch.from_numpy(X_train)
+    X_val = torch.from_numpy(X_val)
+    X_test = torch.from_numpy(X_test)
 
-    elif args.task == "redshift_prediction":
-
-        data_train_z = np.load(base_sersic_path / args.autolabeling_dataset_path)
-        X_train = data_train_z["imgs"]
-        z_train = data_train_z["z"]
-
-        data_val_z = np.load(base_sersic_path / "val_redshift.npz")
-        X_val = data_val_z["imgs"]
-        z_val = data_val_z["z"]
-        
-        data_test_z = np.load(base_sersic_path / "test_delight.npz")
-        X_test = data_test_z["imgs"]
-        z_test = data_test_z["z"]
-
-        del data_train_z, data_val_z, data_test_z
-
-    elif args.task == "multitask":
-
-        data_train = np.load(base_sersic_path / args.autolabeling_dataset_path)
-        X_train = data_train["imgs"]
-        pos_train = data_train["pos"]
-        z_train = data_train["z"]
-
-        data_val_delight = np.load(base_sersic_path / "val_delight.npz")
-        X_val_delight = data_val_delight["imgs"]
-        pos_val = data_val_delight["pos"]
-
-        data_test_delight = np.load(base_sersic_path / "test_delight.npz")
-        X_test_delight = data_test_delight["imgs"]
-        pos_test = data_test_delight["pos"]
-
-        data_val_z = np.load(base_sersic_path / "val_redshift.npz")
-        X_val_z = data_val_z["imgs"]
-        z_val = data_val_z["z"]
-        
-        data_test_z = np.load(base_sersic_path / "test_delight.npz")
-        X_test_z = data_test_z["imgs"]
-        z_test = data_test_z["z"]
-
-        del data_train, data_val_delight, data_test_delight, data_val_z, data_test_z
-
-    all_channels = ["g", "r", "i", "z", "y"]
-    selected_channels = list(args.channels)
-    idx_channels = [all_channels.index(c) for c in selected_channels]
-
-    if X_train.shape[2] > 1: # multi-channel
-        X_train = torch.from_numpy(X_train[:, :, idx_channels, :, :])
-    else:
-        X_train = torch.from_numpy(X_train)
-        
-    X_val = torch.from_numpy(X_val[:, :, idx_channels, :, :])
-    X_test = torch.from_numpy(X_test[:, :, idx_channels, :, :])
-
-    pos_train = torch.from_numpy(pos_train)
-    pos_val = torch.from_numpy(pos_val)
-    pos_test = torch.from_numpy(pos_test)
+    y_train = torch.from_numpy(y_train)
+    y_val = torch.from_numpy(y_val)
+    y_test = torch.from_numpy(y_test)
 
     print(f"Carga de datos finalizada en {time.time()-inicio} [s]\n")
     #-----------CARGA DE DATOS-----------#
@@ -154,13 +112,12 @@ if __name__ == "__main__":
     dm = PRISMDataModule(X_train=X_train, 
                             X_val=X_val, 
                             X_test=X_test, 
-                            pos_train=pos_train, 
-                            pos_val=pos_val, 
-                            pos_test=pos_test,
+                            y_train=y_train, 
+                            y_val=y_val, 
+                            y_test=y_test,
                             batch_size=args.batch_size, 
                             num_workers=args.num_workers, 
-                            seed=args.seed,
-                            use_sampler=args.use_sampler)
+                            seed=args.seed)
 
 
     if args.model_name == "delight":
@@ -170,7 +127,7 @@ if __name__ == "__main__":
             "nconv3": 41,
             "ndense": 685,
             "dropout": 0.06,
-            "channels": len(args.channels),
+            "channels": 3,
             "levels": 5,
             "lr": args.lr,
             "weight_decay": args.weight_decay
@@ -178,6 +135,18 @@ if __name__ == "__main__":
 
         model = Delight(config)
     
+    elif args.model_name == 'resnet18':
+
+        config = {
+            "ndense": 685,
+            "dropout": 0.06,
+            "channels": 1,
+            "levels": 5,
+            "lr": args.lr,
+            "weight_decay": args.weight_decay
+        }
+
+        model = Resnet18(config)
 
     wandb_logger = WandbLogger(project="PRISM", name =args.run_name, save_dir = save_files, entity="fforster-uchile")
 
@@ -238,12 +207,6 @@ if __name__ == "__main__":
     test_mean_preds = model.test_mean_preds
     test_original_targets = model.test_original_targets
 
-    df_test = pd.read_csv("../data/SERSIC/df_test_delight.csv")
-    coords_preds = obtain_predicted_ra_dec(df_test, test_mean_preds)
-
-    df_preds = pd.DataFrame(coords_preds, columns=['ra_pred','dec_pred'])
-    df_preds.to_csv(os.path.join(save_files, "test_predictions.csv"), index=False)
-
     np.savez(os.path.join(save_files, "test_results.npz"), 
              mean_preds = test_mean_preds.numpy(),
              original_target = test_original_targets.numpy())
@@ -260,7 +223,7 @@ if __name__ == "__main__":
     final_val_mse = model.loss(val_mean_preds.to(model.device), val_original_targets.to(model.device))
 
     # Loggear la métrica final UNA SOLA VEZ usando el logger de W&B
-    wandb_logger.log_metrics({"val/mean_mse": final_val_mse.item()})
+    wandb_logger.log_metrics({"val/mse": final_val_mse.item()})
 
     wandb.finish()
 

@@ -34,7 +34,7 @@ def get_wcs(ra, dec, center):
     wcs.wcs.cunit = ["deg", "deg"]
     return wcs
 
-def get_galaxy_img(df, id, level, size):
+def get_galaxy_img(df, id, level, size, filters='r'):
 
     """
     Descarga una imagen astronómica del catálogo Pan-STARRS usando hips2fits 
@@ -76,20 +76,23 @@ def get_galaxy_img(df, id, level, size):
         'CRVAL2': dec,
     })
 
-    result = hips2fits.query_with_wcs(
-        hips='CDS/P/PanSTARRS/DR1/r',
-        wcs=w,
-        get_query_payload=False,
-        format='fits')
+    imgs = []
 
+    for filter in list(filters):
+        result = hips2fits.query_with_wcs(
+            hips=f'CDS/P/PanSTARRS/DR1/{filter}',
+            wcs=w,
+            get_query_payload=False,
+            format='fits')
 
-    r = result[0].data.byteswap().newbyteorder()
-    r = np.nan_to_num(r, 0)
+        r = result[0].data.byteswap().newbyteorder()
+        r = np.nan_to_num(r, 0)
+        imgs.append(r)
 
     return r
 
 
-def get_sn_img(sn_ra, sn_dec, level, size):
+def get_sn_img(sn_ra, sn_dec, level, size, filters='r'):
 
     """
     Descarga una imagen astronómica del catálogo Pan-STARRS usando hips2fits 
@@ -109,7 +112,7 @@ def get_sn_img(sn_ra, sn_dec, level, size):
     Returns
     -------
     np.ndarray
-        Imagen en formato numpy array 2D, sin valores NaN (estos se reemplazan por 0).
+        Imagen en formato numpy array 3D (channel, alto, ancho), sin valores NaN (estos se reemplazan por 0).
     """
 
     w = WCS(header={
@@ -128,20 +131,23 @@ def get_sn_img(sn_ra, sn_dec, level, size):
         'CRVAL2': sn_dec,
     })
 
-    result = hips2fits.query_with_wcs(
-        hips='CDS/P/PanSTARRS/DR1/r',
-        wcs=w,
-        get_query_payload=False,
-        format='fits')
+    imgs = []
+
+    for filter in list(filters):
+        result = hips2fits.query_with_wcs(
+            hips=f'CDS/P/PanSTARRS/DR1/{filter}',
+            wcs=w,
+            get_query_payload=False,
+            format='fits')
+
+        r = result[0].data.byteswap().newbyteorder()
+        r = np.nan_to_num(r, 0)
+        imgs.append(r)
+
+    return np.array(imgs)
 
 
-    r = result[0].data.byteswap().newbyteorder()
-    r = np.nan_to_num(r, 0)
-
-    return r
-
-
-def get_multires(df, id, size):
+def get_multires(df, id, size, filters):
     """
     Genera un conjunto de imágenes multiresolución de una galaxia.
 
@@ -162,18 +168,21 @@ def get_multires(df, id, size):
     Returns
     -------
     np.ndarray
-        Arreglo de forma (5, size, size) que contiene las imágenes de la galaxia 
+        Arreglo de forma (5, channels, size, size) que contiene las imágenes de la galaxia 
         en diferentes resoluciones (level=0..4).
     """
+
+    ra_sn, dec_sn = df[['sn_ra', 'sn_dec']].iloc[id].values
+
     multi = []
     for i in range(5):
-        img = get_galaxy_img(df, id, level=i, size=size)
+        img = get_sn_img(ra_sn, dec_sn, level=i, size=size, filters=filters)
         multi.append(img)
 
     return np.array(multi)
 
 
-def get_augmented_multires(df, idx, size, num_augmentations):
+def get_augmented_multires(df, idx, size, num_augmentations, filters):
     """
     Toma un ejemplo de galaxia y genera distintas imagenes centradas en SN generadas segun su perfil de Sérsic,
     para cada imagen tambien se generan sub-imagenes en diferentes resoluciones y campos de vision,
@@ -193,6 +202,8 @@ def get_augmented_multires(df, idx, size, num_augmentations):
         Tamaño (en píxeles) de cada imagen de salida.
     num_augmentations : int
         Número de ejemplos de data augmentation a generar (posiciones aleatorias de SN).
+    filters : str
+        Filtros a descargar (grizy)
 
     Returns
     -------
@@ -239,7 +250,7 @@ def get_augmented_multires(df, idx, size, num_augmentations):
         # Obtenemos la imagen en multi-resolucion
         multi = []
         for i in range(5):
-            img = get_sn_img(ra_sn, dec_sn, level=i, size=size)
+            img = get_sn_img(ra_sn, dec_sn, level=i, size=size, filters=filters)
             multi.append(img)
 
         imagenes.append(np.array(multi))
