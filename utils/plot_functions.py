@@ -6,6 +6,11 @@ from astropy.wcs import WCS
 import matplotlib.cm as cm
 import re
 
+from matplotlib.colors import Normalize 
+from scipy.interpolate import interpn
+
+from matplotlib.cm import viridis, plasma, jet, ScalarMappable
+
 
 def load__preds(name_run):
     """
@@ -470,4 +475,93 @@ def plot_residuals_vs_host_dist_grouped(
     axs[0].set_ylabel("Residual Dist ['']")
 
     plt.tight_layout()
+    plt.show()
+
+
+def regression_metrics(y_true,y_pred):
+    residuals = (y_pred- y_true)/(1+ y_true)
+
+    bias = residuals.mean()
+    nmad = 1.4826 * np.median(np.abs(residuals - np.median(residuals)))
+    foutliers = (np.abs(residuals)>0.05).sum()/len(residuals)
+    return bias, nmad, foutliers
+
+
+def plot_regresion(zphot1,zphot2, zspec1,zspec2,name1,name2,cmap = "jet",dpi=700):
+
+    fig, axs = plt.subplots(1, 2, figsize=(12, 5), dpi=dpi, sharey=True, gridspec_kw={'wspace': 0})
+
+
+    font_size = 10
+    vmax= 11
+
+
+    metricas_1 = regression_metrics(zspec1,zphot1)
+
+    metricas_2 = regression_metrics(zspec2,zphot2)
+
+
+
+
+    _, _, _, img  =axs[0].hist2d(zspec1, zphot1, bins=250, range=[[0, 0.32], [0, 0.32]], cmap=cmap,cmin=1, vmax=vmax)
+    _, _, _, img2  =axs[1].hist2d(zspec2, zphot2, bins=250, range=[[0, 0.32], [0, 0.32]], cmap=cmap, cmin=1, vmax=vmax)
+
+    frecuencias1 = img.get_array().data
+    frecuencias2 = img2.get_array().data
+
+
+    frecuencias1[frecuencias1==0] = np.nan
+    frecuencias2[frecuencias2==0] = np.nan
+
+
+    img.set_array(frecuencias1)
+    img2.set_array(frecuencias2)
+
+    axs[0].text(0.035, 0.3, f'{name1}', fontsize=12, color='black', ha='left', va='top')
+    axs[0].text(0.035, 0.27, f"$<\\Delta z> =$", fontsize=font_size, color='black', fontweight='bold', math_fontfamily='cm')
+    axs[0].text(0.035, 0.25, f"$\\sigma_{{MAD}} =$", fontsize=font_size, color='black', fontweight='bold', math_fontfamily='cm')
+    axs[0].text(0.035, 0.23, f"$\\eta =$", fontsize=font_size, color='black', fontweight='bold', math_fontfamily='cm')
+    axs[0].text(0.09, 0.27, f"{metricas_1[0]:.5f}", fontsize=font_size, color='black')
+    axs[0].text(0.076, 0.25, f"{metricas_1[1]:.5f}", fontsize=font_size, color='black')
+    axs[0].text(0.055, 0.23, f"{metricas_1[2]*100:.2f}%", fontsize=font_size, color='black')
+
+
+    axs[1].text(0.035, 0.3, f'{name2}', fontsize=12, color='black', ha='left', va='top')
+    axs[1].text(0.035, 0.27, f"$<\\Delta z> =$", fontsize=font_size, color='black', fontweight='bold', math_fontfamily='cm')
+    axs[1].text(0.035, 0.25, f"$\\sigma_{{MAD}} =$", fontsize=font_size, color='black', fontweight='bold', math_fontfamily='cm')
+    axs[1].text(0.035, 0.23, f"$\\eta =$", fontsize=font_size, color='black', fontweight='bold', math_fontfamily='cm')
+    axs[1].text(0.09, 0.27, f"{metricas_2[0]:.5f}", fontsize=font_size, color='black')
+    axs[1].text(0.076, 0.25, f"{metricas_2[1]:.5f}", fontsize=font_size, color='black')
+    axs[1].text(0.055, 0.23, f"{metricas_2[2]*100:.2f}%", fontsize=font_size, color='black')
+
+    for ax in axs:
+
+        ax.set_xlim(0, 0.32)
+        ax.set_ylim(0, 0.32)
+        ax.set_box_aspect(1)
+
+        ax.tick_params(axis='both', which='major', length=6, bottom=True, top=True,left=True, right=True, direction='in')   
+        ax.tick_params(axis='both', which='minor', length=3, left=True, right=True, bottom=True, top=True, direction='in')   
+
+        ax.set_xticks(np.linspace(0.0,0.32,33), minor=True)
+        ax.set_xticks(np.linspace(0.05,0.3,6), minor=False)
+
+        ax.set_yticks(np.linspace(0.0,0.32,33), minor=True)
+        ax.set_yticks(np.linspace(0.0,0.3,7), minor=False)
+
+        ax.plot([0, 0.32], [0, 0.32], linestyle='-', color='black', linewidth=0.7)
+        ax.plot([0.05, 0.32], [0, 0.257143], linestyle='--', color='red', alpha=0.7)
+        ax.plot([0, 0.257143], [0.05, 0.32], linestyle='--', color='red', alpha=0.7)
+
+        ax.set_xlabel("ZSPEC")
+
+
+    axs[0].set_ylabel("ZPHOT")
+
+
+    norm = Normalize(vmin=0.2, vmax=vmax)
+    sm = ScalarMappable(norm=norm, cmap=cmap)
+    cbar = fig.colorbar(sm, ax=axs, orientation='vertical', pad=0.03)
+    cbar.set_label('DENSIDAD')
+
     plt.show()

@@ -21,12 +21,16 @@ class PRISMDataModule(L.LightningDataModule):
         X_train,
         X_val,
         X_test,
-        pos_train=None,
-        pos_val=None,
-        pos_test=None,
-        z_train=None,
-        z_val=None,
-        z_test=None,
+        X_val_pos,
+        X_val_z,
+        X_test_pos,
+        X_test_z,
+        pos_train,
+        pos_val,
+        pos_test,
+        z_train,
+        z_val,
+        z_test,
         batch_size=40,
         seed=0,
         num_workers=4,
@@ -37,6 +41,12 @@ class PRISMDataModule(L.LightningDataModule):
         self.X_train = X_train
         self.X_val = X_val
         self.X_test = X_test
+
+        self.X_val_pos = X_val_pos
+        self.X_val_z = X_val_z
+
+        self.X_test_pos = X_test_pos
+        self.X_test_z = X_test_z
 
         self.pos_train = pos_train
         self.pos_val = pos_val
@@ -70,11 +80,11 @@ class PRISMDataModule(L.LightningDataModule):
         elif self.task == "multitask":
             self.train_dataset = MultitaskDataset(self.X_train, self.pos_train, self.z_train)
 
-            self.val_dataset_pos = DelightClassic(self.X_val, self.pos_val)
-            self.val_dataset_redshift = RedshiftDataset(self.X_val, self.z_val)
+            self.val_dataset_pos = DelightClassic(self.X_val_pos, self.pos_val)
+            self.val_dataset_redshift = RedshiftDataset(self.X_val_z, self.z_val)
 
-            self.test_dataset_pos = DelightClassic(self.X_test, self.pos_test)
-            self.test_dataset_redshift = RedshiftDataset(self.X_test, self.z_test)
+            self.test_dataset_pos = DelightClassic(self.X_test_pos, self.pos_test)
+            self.test_dataset_redshift = RedshiftDataset(self.X_test_z, self.z_test)
 
     def train_dataloader(self):
 
@@ -95,21 +105,6 @@ class PRISMDataModule(L.LightningDataModule):
             sample_weights[mask_large] = w_large
             sample_weights[mask_small] = w_small
 
-            # counts, bin_edges = np.histogram(self.radius_train, bins=5)
-
-            # # --- 3️⃣ Asignar cada muestra a un bin ---
-            # bin_indices = np.digitize(self.radius_train, bin_edges[:-1], right=False) - 1
-            # bin_indices = np.clip(bin_indices, 0, len(counts) - 1)
-
-            # # --- 4️⃣ Calcular pesos inversos por frecuencia ---
-            # bin_probs = counts / counts.sum()
-            # inv_bin_weights = 1.0 / (bin_probs + 1e-8)
-
-            # # --- 5️⃣ Asignar peso a cada muestra según su bin ---
-            # sample_weights = inv_bin_weights[bin_indices]
-            # sample_weights /= sample_weights.sum()  # normalizar
-
-            # --- 6️⃣ Crear el sampler ---
             sampler = WeightedRandomSampler(
                 weights=torch.DoubleTensor(sample_weights),
                 num_samples=len(sample_weights),
@@ -120,7 +115,7 @@ class PRISMDataModule(L.LightningDataModule):
             dataset=self.train_dataset,
             batch_size=self.batch_size,
             sampler=sampler if self.use_sampler else None,
-            shuffle=not self.use_sampler,
+            shuffle= not self.use_sampler,
             num_workers=self.num_workers,
             persistent_workers=self.persistent,
             pin_memory=False,

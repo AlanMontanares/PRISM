@@ -132,11 +132,7 @@ if __name__ == "__main__":
         print("Usando el servidor mirror")
         hips2fits.server = 'https://alaskybis.cds.unistra.fr/hips-image-services/hips2fits'
 
-
-    data= np.load("/home/acontreras/PRISM/data/SERSIC/pasquet_val.npy")
-    mask = (data.sum((3,4))==0).all((1,2))
-
-    df = pd.read_csv(args.dataframe_path)[mask]
+    df = pd.read_csv(args.dataframe_path)
 
     alpha = time.time()
     download_all(df, args.img_size, args.name_dataset, args.n_procesos, args.filters)

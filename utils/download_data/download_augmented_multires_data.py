@@ -5,6 +5,8 @@ import threading
 import time
 import shutil
 
+from astroquery.hips2fits import hips2fits
+
 import argparse
 import os
 from joblib import Parallel, delayed
@@ -169,32 +171,25 @@ if __name__ == "__main__":
     parser.add_argument('--dataframe_path', type=str, default="data/SERSIC/df_train_delight.csv", help='Ruta al dataframe')
     parser.add_argument('--img_size', type=int, default=30, help='Tamaño de las imagenes a descargar')
     parser.add_argument('--filters', type=str, default='r', help='Filtros a descargar')
-    parser.add_argument('--percentaje', type=float, default=0.01, help='Porciento de augmentations')
-    parser.add_argument('--n_procesos', type=int, default=16, help='Numero de hilos')
+    parser.add_argument('--percentaje', type=float, default=None, help='Porciento de augmentations')
+    parser.add_argument('--n_procesos', type=int, default=8, help='Numero de hilos')
     parser.add_argument('--name_dataset', type=str, default="augmented_dataset", help='Nombre del dataset')
+    parser.add_argument('--use_mirror', type=str, default=None, help="Usar el servidor mirror de Hips2FITS")
 
     args = parser.parse_args()
 
-    df = pd.read_csv(args.dataframe_path)
-    df2 = df[:50000]
-    df3 = df[50000:]
+    if args.use_mirror:
+        print("Usando el servidor mirror")
+        hips2fits.server = 'https://alaskybis.cds.unistra.fr/hips-image-services/hips2fits'
 
-    #df = augment_dataframe(df, args.percentaje)
+    df = pd.read_csv(args.dataframe_path)
+
+    if args.percentaje:
+        df = augment_dataframe(df, args.percentaje)
 
     alpha = time.time()
-    #download_all(df, args.img_size, args.name_dataset, args.n_procesos, args.filters)
+    download_all(df, args.img_size, args.name_dataset, args.n_procesos, args.filters)
 
-    configs = [
-        (df2, "autolabeling_pasquet_test_1"),
-        (df3, "autolabeling_pasquet_test_2"),
-    ]
-
-    for df, name in configs:
-        try:
-            download_all(df, args.img_size, name, args.n_procesos, args.filters)
-        except Exception as e:
-            print(f"Fallo con {name}: {e}")
-
-    #shutil.rmtree(args.name_dataset)
+    shutil.rmtree(args.name_dataset)
 
     print(f"Fin Total: {time.time()-alpha} [s]")

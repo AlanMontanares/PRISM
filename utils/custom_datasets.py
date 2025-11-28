@@ -107,7 +107,7 @@ class RedshiftDataset(Dataset):
         self.z = z
 
     def __len__(self):
-        return len(self.z)
+        return len(self.imgs)
 
     def _rotate_and_flip_image(self, img, k, flip):
         """
@@ -155,7 +155,7 @@ class RedshiftDataset(Dataset):
         # Apilar las imágenes transformadas:
         # (8, n_levels, n_channels, alto, ancho)
         images_stack = torch.stack(images_transformed, dim=0).float()
-        redshift_stack = torch.stack(redshift_repeated).float()
+        redshift_stack = torch.stack(redshift_repeated).long()
 
         return images_stack, redshift_stack
 
@@ -171,7 +171,7 @@ class MultitaskDataset(Dataset):
         self.z = z
 
     def __len__(self):
-        return len(self.z)
+        return len(self.imgs)
 
     def _rotate_and_flip_image(self, img, k, flip):
         """

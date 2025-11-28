@@ -172,11 +172,12 @@ def get_multires(df, id, size, filters):
         en diferentes resoluciones (level=0..4).
     """
 
-    ra_sn, dec_sn = df[['sn_ra', 'sn_dec']].iloc[id].values
+    #ra, dec = df[['sn_ra', 'sn_dec']].iloc[id].values
+    ra, dec = df[['host_ra', 'host_dec']].iloc[id].values
 
     multi = []
     for i in range(5):
-        img = get_sn_img(ra_sn, dec_sn, level=i, size=size, filters=filters)
+        img = get_sn_img(ra, dec, level=i, size=size, filters=filters)
         multi.append(img)
 
     return np.array(multi)
