@@ -83,7 +83,7 @@ class PRISMDataModule(L.LightningDataModule):
             self.val_dataset_pos = DelightClassic(self.X_val_pos, self.pos_val)
             self.val_dataset_redshift = RedshiftDataset(self.X_val_z, self.z_val)
 
-            self.test_dataset_pos = DelightClassic(self.X_test_pos, self.pos_test)
+            self.test_dataset_pos = DelightClassic(self.X_test_pos, self.pos_test) #a
             self.test_dataset_redshift = RedshiftDataset(self.X_test_z, self.z_test)
 
     def train_dataloader(self):

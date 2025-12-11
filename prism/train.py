@@ -31,11 +31,10 @@ def obtain_inputs(dataset_path, task, channels):
     else:
         X = torch.from_numpy(X)
 
-
-    # if "g" in selected_channels:
-    #     print("usando arcosenoh")
-    #     g_idx = selected_channels.index("g")
-    #     X[:, :, g_idx, :, :] = torch.asinh(X[:, :, g_idx, :, :])
+    if "g" in selected_channels:
+        print("usando arcoseno hiperbolico")
+        g_idx = selected_channels.index("g")
+        X[:, :, g_idx, :, :] = torch.asinh(X[:, :, g_idx, :, :])
 
     mask = (X.sum((3,4))==0).any((1,2)) # Casos con bandas == 0
 
@@ -51,13 +50,12 @@ def obtain_inputs(dataset_path, task, channels):
         return X[~mask], z_train_class[~mask], z[~mask]
 
     elif task == "multitask":
-        z = torch.from_numpy(data["z"])
         pos = torch.from_numpy(data["pos"])
 
         range_z = np.linspace(0, 0.4, 181)[:-1]
         z_train_class = torch.tensor(np.digitize(data["z"],range_z)-1)
 
-        return X[~mask], pos[~mask], z_train_class[~mask], z[~mask]
+        return X[~mask], pos[~mask], z_train_class[~mask]
 
 
 if __name__ == "__main__":
@@ -141,33 +139,34 @@ if __name__ == "__main__":
 
         X_train, pos_train = obtain_inputs(dataset_path= base_sersic_path / args.train_dataset_name, task=args.task, channels=args.channels)
         X_val, pos_val = obtain_inputs(dataset_path= base_sersic_path / "val_delight.npz", task=args.task, channels=args.channels)
-        X_test, pos_test = obtain_inputs(dataset_path= base_sersic_path / "test_delight.npz", task=args.task, channels=args.channels)
-    
+        X_test, pos_test = obtain_inputs(dataset_path= base_sersic_path / "test_delight_fixed.npz", task=args.task, channels=args.channels)
+
         model = Delight(config)
 
 
     elif args.task == "redshift_prediction":
         
         if args.center_on_galaxy:
-            X_train, z_train_class, z_train = obtain_inputs(dataset_path= base_sersic_path / args.train_dataset_name, task=args.task, channels=args.channels)
-            X_val, z_val_class, z_val = obtain_inputs(dataset_path= base_sersic_path / "X_val_pasquet.npz", task=args.task, channels=args.channels)
+            print("Center on Galaxy")
+            X_train, z_train_class, _ = obtain_inputs(dataset_path= base_sersic_path / args.train_dataset_name, task=args.task, channels=args.channels)
+            X_val, z_val_class, _ = obtain_inputs(dataset_path= base_sersic_path / "X_val_pasquet.npz", task=args.task, channels=args.channels)
             X_test, z_test_class, z_test = obtain_inputs(dataset_path= base_sersic_path / "X_test_pasquet.npz", task=args.task, channels=args.channels)
 
         else:
-            X_train, z_train_class, z_train = obtain_inputs(dataset_path= base_sersic_path / args.train_dataset_name, task=args.task, channels=args.channels)
-            X_val, z_val_class, z_val = obtain_inputs(dataset_path= base_sersic_path / "X_val_autolabeling_pasquet.npz", task=args.task, channels=args.channels)
+            X_train, z_train_class, _ = obtain_inputs(dataset_path= base_sersic_path / args.train_dataset_name, task=args.task, channels=args.channels)
+            X_val, z_val_class, _ = obtain_inputs(dataset_path= base_sersic_path / "X_val_autolabeling_pasquet.npz", task=args.task, channels=args.channels)
             X_test, z_test_class, z_test = obtain_inputs(dataset_path= base_sersic_path / "X_test_autolabeling_pasquet.npz", task=args.task, channels=args.channels)
 
         model = Delight_z(config)
 
     elif args.task == "multitask":
 
-        X_train, pos_train, z_train = obtain_inputs(dataset_path= base_sersic_path / args.train_dataset_name, task=args.task, channels=args.channels)
+        X_train, pos_train, z_train_class = obtain_inputs(dataset_path= base_sersic_path / args.train_dataset_name, task=args.task, channels=args.channels)
 
         X_val_delight, pos_val = obtain_inputs(dataset_path= base_sersic_path / "val_delight.npz", task="galaxy_hunter", channels=args.channels)
-        X_test_delight, pos_test = obtain_inputs(dataset_path= base_sersic_path / "test_delight.npz", task="galaxy_hunter", channels=args.channels)
+        X_test_delight, pos_test = obtain_inputs(dataset_path= base_sersic_path / "test_delight_fixed.npz", task="galaxy_hunter", channels=args.channels)
 
-        X_val_z, z_val_class, z_val = obtain_inputs(dataset_path= base_sersic_path / "X_val_autolabeling_pasquet.npz", task="redshift_prediction", channels=args.channels)
+        X_val_z, z_val_class, _ = obtain_inputs(dataset_path= base_sersic_path / "X_val_autolabeling_pasquet.npz", task="redshift_prediction", channels=args.channels)
         X_test_z, z_test_class, z_test = obtain_inputs(dataset_path= base_sersic_path / "X_test_autolabeling_pasquet.npz", task="redshift_prediction", channels=args.channels)
 
         if args.use_gradnorm:
@@ -209,19 +208,44 @@ if __name__ == "__main__":
         "seed": args.seed
     })
 
-    checkpoint_callback = ModelCheckpoint(
-        monitor="val/loss" if args.task != "redshift_prediction" else "val/z_loss", 
-        dirpath=save_files, 
-        filename='delight_best_{epoch}', 
-        save_top_k=1,
-        save_last = False,  
-        mode="min")
-
+ 
     lr_callback = LearningRateMonitor(logging_interval="epoch",
                                       log_momentum=True,
                                       log_weight_decay=True)
     
     progress_bar_callback = RichProgressBar()
+
+
+    if args.task == "multitask":
+        checkpoint_callback = ModelCheckpoint(
+            monitor="val/loss" if args.task != "redshift_prediction" else "val/z_loss", 
+            dirpath=save_files, 
+            filename='best_loss_{epoch}', 
+            save_top_k=1,
+            save_last = False,  
+            mode="min")
+
+        checkpoint_callback_z = ModelCheckpoint(
+            monitor="val/z_loss", 
+            dirpath=save_files, 
+            filename='best_zloss_{epoch}', 
+            save_top_k=1,
+            save_last = False,  
+            mode="min")
+        
+        callbacks = [checkpoint_callback, checkpoint_callback_z ,lr_callback, progress_bar_callback]
+    else:
+
+        checkpoint_callback = ModelCheckpoint(
+            monitor="val/loss" if args.task != "redshift_prediction" else "val/z_loss", 
+            dirpath=save_files, 
+            filename='delight_best_{epoch}', 
+            save_top_k=1,
+            save_last = False,  
+            mode="min")
+
+        callbacks = [checkpoint_callback, lr_callback, progress_bar_callback]
+    
 
     trainer = L.Trainer(
         accumulate_grad_batches=args.accumulate_grad_batches,
@@ -230,9 +254,9 @@ if __name__ == "__main__":
         deterministic=True,
         max_epochs=args.epoch,
         accelerator ="gpu",
-        strategy=DDPStrategy(find_unused_parameters=True) if args.task == "multitask" else "auto",
+        strategy=DDPStrategy(find_unused_parameters=False) if args.task == "multitask" else "auto",
         devices = args.devices,
-        callbacks=[checkpoint_callback, lr_callback, progress_bar_callback])
+        callbacks=callbacks)
 
     inicio = time.time()
     trainer.fit(model, dm)
@@ -244,8 +268,6 @@ if __name__ == "__main__":
     gc.collect()
     torch.cuda.empty_cache()
     
-    best_ckpt_path = checkpoint_callback.best_model_path
-
     trainer_preds = L.Trainer(
         accelerator="gpu",   
         devices=1,
@@ -256,13 +278,16 @@ if __name__ == "__main__":
     )
 
     #-----------TEST DATASET-----------#
-    trainer_preds.test(model=model, ckpt_path=best_ckpt_path, datamodule=dm)
 
-    test_mean_preds = model.test_mean_preds
-    test_original_targets = model.test_original_targets
+    if args.task == "galaxy_hunter":
+
+        best_ckpt_path = checkpoint_callback.best_model_path
+        trainer_preds.test(model=model, ckpt_path=best_ckpt_path, datamodule=dm)
+
+        test_mean_preds = model.test_mean_preds
+        test_original_targets = model.test_original_targets
     
-    if args.task != "redshift_prediction":
-        df_test = pd.read_csv("../data/SERSIC/df_test_delight.csv")
+        df_test = pd.read_csv("../data/SERSIC/df_test_delight_fixed.csv")
         coords_preds = obtain_predicted_ra_dec(df_test, test_mean_preds)
 
         df_preds = pd.DataFrame(coords_preds, columns=['ra_pred','dec_pred'])
@@ -271,11 +296,49 @@ if __name__ == "__main__":
         np.savez(os.path.join(save_files, "test_results.npz"), 
                 mean_preds = test_mean_preds.numpy(),
                 original_target = test_original_targets.numpy())
-    else:
+
+    elif args.task == "redshift_prediction":
+
+        best_ckpt_path = checkpoint_callback.best_model_path
+        trainer_preds.test(model=model, ckpt_path=best_ckpt_path, datamodule=dm)
+
+        test_zphot = model.test_zphot
+        np.savez(os.path.join(save_files, "test_results_redshift.npz"), 
+                zphot = test_zphot.numpy(),
+                zspect = z_test.numpy())
+
+    elif args.task == "multitask":
+
+        #====== Galaxy pos results ======#
+
+        best_ckpt_path = checkpoint_callback.best_model_path
+        trainer_preds.test(model=model, ckpt_path=best_ckpt_path, datamodule=dm)
+
+        print(f"PRIMER CKPT : {model.test_zphot[:5]}")
+        test_mean_preds = model.test_mean_preds_pos 
+        test_original_targets = model.test_original_targets_pos
+    
+        df_test = pd.read_csv("../data/SERSIC/df_test_delight_fixed.csv")
+
+        coords_preds = obtain_predicted_ra_dec(df_test, test_mean_preds)
+
+        df_preds = pd.DataFrame(coords_preds, columns=['ra_pred','dec_pred'])
+        df_preds.to_csv(os.path.join(save_files, "test_predictions.csv"), index=False)
+
         np.savez(os.path.join(save_files, "test_results.npz"), 
                 mean_preds = test_mean_preds.numpy(),
-                original_target = z_test.numpy())
+                original_target = test_original_targets.numpy())
 
+
+        #====== Redshift results ======#
+
+        best_ckpt_path = checkpoint_callback_z.best_model_path
+        trainer_preds.test(model=model, ckpt_path=best_ckpt_path, datamodule=dm)
+        print(f"SEGUNDO CKPT : {model.test_zphot[:5]}")
+        test_zphot = model.test_zphot
+        np.savez(os.path.join(save_files, "test_results_redshift.npz"), 
+                zphot = test_zphot.numpy(),
+                zspect = z_test.numpy())
     #-----------PREDICCIONES-----------#
 
 

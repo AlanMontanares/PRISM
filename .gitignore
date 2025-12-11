@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 
+# Ignorar los .sh
+*.sh
+
 # Ignorar entorno virtual (tanto venv como .venv)
 venv/
 .venv/

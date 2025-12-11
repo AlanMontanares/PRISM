@@ -244,7 +244,7 @@ class MultitaskDataset(Dataset):
         # Apilar las imágenes transformadas:
         # (8, n_levels, n_channels, alto, ancho)
         images_stack = torch.stack(images_transformed, dim=0).float()
-        redshift_stack = torch.stack(redshift_repeated).float()
+        redshift_stack = torch.stack(redshift_repeated).long()
 
         keys_stack = (
             torch.stack(keypoints_transformed).float() 
